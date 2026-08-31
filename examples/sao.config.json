@@ -1,0 +1,28 @@
+{
+  "paths": {
+    "resources": ".",
+    "saoView": "sao",
+    "bladeView": "blade",
+    "compiled": "js"
+  },
+  "contexts": {
+    "examples": {
+      "name": "Examples",
+      "app": [],
+      "views": {
+        "sao": "."
+      },
+      "blade": {
+        "sao": "."
+      },
+      "compiled": {
+        "views": ".",
+        "registry": "registry.ts"
+      },
+      "temp": {
+        "views": "temp/views",
+        "registry": "temp/registry.ts"
+      }
+    }
+  }
+}

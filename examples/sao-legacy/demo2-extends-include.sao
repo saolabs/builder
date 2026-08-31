@@ -1,0 +1,50 @@
+@import($__template__.'header' as Header)
+@import($__template__.'footer' as Footer)
+@import($__template__.'post-list')
+@vars($demoList = [])
+@useState($status, false)
+@const([$user, $setUser] = useState(['name' => 'Jone', 'email' => 'jon@test.com']))
+@const([$posts, $setPosts] = useState([
+    ['title' => '...', 'content' => '...'],
+    ['title' => '...', 'content' => '...'],
+    ['title' => '...', 'content' => '...'],
+    ['title' => '...', 'content' => '...'],
+]))
+
+@let($i = 0)
+
+@extends($__layout__.'base')
+@block('content')
+    <Header></Header>
+    <div class="demo" @class(['active' => $status]) @attr(['data-count' => count($demoList), 'data-user-name' => $user['name']])>
+        <h1>Hello, {{ $user['name'] }}!</h1>
+        <p>Your email is <span>{{ $user['email'] }}</span>.</p>
+
+        <button @click($setStatus(!$status))>Toggle Status: {{ $status ? 'On' : 'Off' }}</button>
+
+        <h2>Posts:</h2>
+        <ul>
+            @if(count($posts) === 0)
+                <li>No posts available.</li>
+            @else
+                @foreach($posts as $post)
+                    <li>
+                        <h3>{{ $post['title'] }}</h3>
+                        <p>{{ $post['content'] }}</p>
+                    </li>
+                @endforeach
+            @endif
+        </ul>
+        <div class="while-loop-demo">
+            @while($i < 5)
+                <p>Counter: {{ $i }}</p>
+                @exec($i++)
+            @endwhile
+        </div>
+
+    </div>
+    <post-list :posts="$posts" name="test" />
+    <Footer>
+        <post-list :posts="$posts" name="test" />
+    </Footer>
+@endblock

@@ -1,0 +1,16 @@
+@vars(users = null, posts = [])
+@await
+<div>
+    @if(user)
+        <h1>Welcome {{user.name}}</h1>
+        @foreach(postList as post)
+            <div>{{post.title}}</div>
+        @endforeach
+    @else
+        <p>Please login first</p>
+    @endif
+</div>
+<div>
+    <button @click(doAction("login"))>Login</button>
+    <button @click(doAction("fetchPosts"))>Fetch Posts</button>
+</div>

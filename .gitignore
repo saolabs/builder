@@ -1,0 +1,18 @@
+node_modules
+
+# Python compiler cũ chỉ giữ local để đối chiếu khi port/fix parity.
+# Không được publish hoặc đưa vào Git của @saolabs/builder.
+.reference/
+*.py
+*.py[cod]
+__pycache__/
+.pytest_cache/
+
+# Output sinh cục bộ khi debug/test compiler.
+debug_output/
+test_out.js
+
+# Sensitive files
+npm-token.txt
+*.token.txt
+.env.local

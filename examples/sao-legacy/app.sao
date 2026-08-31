@@ -1,0 +1,113 @@
+@props([
+    'title' => 'test',
+    'description' => 'Mô tả',
+    'user' => request()->user()
+])
+@let($test = 'demo')
+@useState([
+    'userState' => $user,
+    'counter' => 0,
+    'posts' => [
+    ['title' => 'title 1', 'description' => 'Mô tả 1'],
+    ['title' => 'title 2', 'description' => 'Mô tả 2'],
+    ['title' => 'title 3', 'description' => 'Mô tả 3'],
+    ]
+])
+@const([$userAvatar, $setAvatar] = useState(getUserAvatar($user)))
+<blade>
+    @extends($__template__ . 'main')
+    @section('meta:type', 'article')
+    @section('meta:og:image', 'https://vcc.vn/static/images/thumbnai.jpg')
+    @block('footer')
+        <div class="footer-container">
+            Footer Content
+        </div>
+    @endblock
+    @block('content')
+        <main>
+            <header>
+                <nav>
+                    <a href="{{route('web.home')}}" title="{{siteinfo('site_name')}}">
+                        <img src="{{asset('static/web/images/loho.png')}}" alt="{{siteinfo('site_name')}}" @class(['site-logo', 'has-login' => $userState]) />
+                    </a>
+                    <ul @class(['site-menu'])>
+                        @foreach($posts as $post)
+                            <li class="menu-item nav-item">
+                                <a href="{{webPostUrl($post)}}" class="nav-link">
+                                    {{$post->title}}
+                                </a>
+                            </li>
+                        @endforeach
+                    </ul>
+                    <div class="account">
+                        @if($userState)
+                            <a href="{{route('web.account')}}" class="account-btn btn-show-menu" data-menu-target="account-menu">
+                                <img src="{{getUserAvatar($userState)}}" class="account-image user-avatar" alt="{{$userState->name}}" />
+                            </a>
+                            <ul class="account-menu" id="account-menu">
+                                {{--  --}}
+                                <li><a href="{{route('web.account')}}">{{text('web.account.dashboard')}}</a></li>
+                                <li><a href="{{route('web.account.profile')}}">{{text('web.account.profile')}}</a></li>
+                                <li><a href="{{route('web.account.change-avatar')}}" @click(changeAvatar())>{{text('web.account.change-avatar')}}</a></li>
+                                <li><a href="{{route('web.account.signout')}}" @click(signout())>{{text('web.account.signout')}}</a></li>
+                            </ul>
+                        @else
+                            <a href="{{route('web.account.signin')}}">{{text('web.account.signin')}}</a>
+                            <a href="{{route('web.account.signup')}}">{{text('web.account.signup')}}</a>
+                        @endif
+                    </div>
+                </nav>
+
+            </header>
+            <h1 @class(['page-title'])>{{$title}}</h1>
+            <p>{{$description}}</p>
+            <div class="card">
+                <button @click($setCounter($counter+1))>{{text('web.contents.clickme', ['counter' => $counter])}}</button>
+            </div>
+
+        </main>
+    @endblock
+</blade>
+<script setup>
+    export default {
+        signout() {
+            // Xử lý đăng xuất
+            console.log('User signed out');
+        },
+        changeAvatar(event) {
+            event.preventDefault();
+            // Xử lý thay đổi avatar
+            const newAvatar = prompt('Enter new avatar URL:');
+            if (newAvatar) {
+                setAvatar(newAvatar);
+                console.log('Avatar updated:', newAvatar);
+            }
+        }
+
+    }
+</script>
+<style>
+    .site-logo {
+        width: 120px;
+        height: auto;
+    }
+    .site-logo.has-login {
+        width: 100px;
+    }
+    .account-image.user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+    }
+    .account-menu {
+        display: none;
+        position: absolute;
+        background: white;
+        list-style: none;
+        padding: 10px;
+        border: 1px solid #ccc;
+    }
+    .btn-show-menu:hover + .account-menu {
+        display: block;
+    }
+</style>

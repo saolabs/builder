@@ -1,0 +1,15 @@
+@useState($isOpen, false)
+<blade>
+<div class="demo3-component" @click(toggle())>
+    Status: {{ $isOpen ? 'Open' : 'Closed' }}
+</div>
+</blade>
+<script setup>
+    export default {
+        toggle() {
+            setIsOpen(!isOpen);
+            console.log(`component ${__VIEW_PATH__}`, this);
+            console.log(`toggled to ${isOpen ? 'Open' : 'Closed'}`);
+        }
+    }
+</script>

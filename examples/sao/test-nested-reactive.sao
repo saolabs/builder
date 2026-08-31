@@ -1,0 +1,136 @@
+@const([items, setItems] = useState([
+    {id: 1, name: 'Apple', category: 'fruit', price: 2, tags: ['red', 'sweet']},
+    {id: 2, name: 'Carrot', category: 'vegetable', price: 1, tags: ['orange']},
+    {id: 3, name: 'Banana', category: 'fruit', price: 3, tags: ['yellow', 'sweet', 'tropical']},
+    {id: 4, name: 'Broccoli', category: 'vegetable', price: 4, tags: ['green', 'healthy']}
+]))
+@const([status, setStatus] = useState('active'))
+@const([count, setCount] = useState(0))
+@const([showDetails, setShowDetails] = useState(true))
+
+<template>
+<div class="nested-reactive-demo">
+    {{-- Level 1: @if with output --}}
+    <h2>Total items: {{ count(items) }}</h2>
+    <p>Status: {{ status }}</p>
+
+    {{-- Level 1: @if block → Level 2: @foreach → Level 3: @if + output --}}
+    @if(showDetails)
+        <div class="details-panel">
+            <h3>Item Details (count: {{ count }})</h3>
+            @foreach(items as item)
+                <div class="item-card" data-id="{{ item.id }}">
+                    <strong>{{ item.name }}</strong> - ${{ item.price }}
+
+                    {{-- Level 3: nested @if inside @foreach inside @if --}}
+                    @if(item.price > 2)
+                        <span class="badge expensive">Expensive</span>
+                    @else
+                        <span class="badge cheap">Affordable</span>
+                    @endif
+
+                    {{-- Level 3: nested @foreach inside @foreach (tags) --}}
+                    <div class="tags">
+                        @foreach(item.tags as tag)
+                            <span class="tag">{{ tag }}</span>
+                        @endforeach
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    @else
+        <p>Details hidden. Click to show.</p>
+    @endif
+
+    {{-- Level 1: @switch block --}}
+    @switch(status)
+        @case('active')
+            <div class="status-active">
+                <p>System is active</p>
+                {{-- Level 2: @for inside @switch --}}
+                @for(i = 0; i < count; i++)
+                    <div class="counter-item">
+                        Item #{{ i + 1 }}
+                        @if(i % 2 === 0)
+                            <span>(even)</span>
+                        @else
+                            <span>(odd)</span>
+                        @endif
+                    </div>
+                @endfor
+            </div>
+            @break
+        @case('inactive')
+            <div class="status-inactive">
+                <p>System is inactive</p>
+            </div>
+            @break
+        @default
+            <div class="status-unknown">
+                <p>Unknown status: {{ status }}</p>
+            </div>
+    @endswitch
+
+    {{-- Level 1: @foreach with complex nesting --}}
+    <div class="category-groups">
+        @foreach(items as key => item)
+            <div class="group">
+                <h4>[{{ key }}] {{ item.name }} ({{ item.category }})</h4>
+
+                {{-- Level 2: @switch inside @foreach --}}
+                @switch(item.category)
+                    @case('fruit')
+                        <span class="icon">🍎</span>
+                        @break
+                    @case('vegetable')
+                        <span class="icon">🥦</span>
+                        @break
+                @endswitch
+
+                {{-- Level 2: @if with nested @foreach --}}
+                @if(count(item.tags) > 1)
+                    <ul>
+                        @foreach(item.tags as idx => tag)
+                            <li>
+                                Tag {{ idx }}: {{ tag }}
+                                @if(tag === 'sweet')
+                                    <em> ← popular!</em>
+                                @endif
+                            </li>
+                        @endforeach
+                    </ul>
+                @else
+                    <p>Only one tag: {{ item.tags[0] }}</p>
+                @endif
+            </div>
+        @endforeach
+    </div>
+
+    {{-- Include with state vars --}}
+    @include('components.item-card', {items: items, count: count})
+</div>
+</template>
+
+<script setup lang="ts">
+    export default {
+        data: {},
+        addItem() {
+            setItems([...items, {
+                id: items.length + 1,
+                name: 'New Item',
+                category: 'fruit',
+                price: 5,
+                tags: ['new']
+            }]);
+        },
+        toggleDetails() {
+            setShowDetails(!showDetails);
+        },
+        incrementCount() {
+            setCount(count + 1);
+        },
+        changeStatus(newStatus: string) {
+            setStatus(newStatus);
+        }
+    }
+</script>

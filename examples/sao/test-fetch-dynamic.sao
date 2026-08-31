@@ -1,0 +1,8 @@
+@vars(items = [])
+@fetch("https://api.example.com/items")
+<div>
+    <h2>Items</h2>
+    @foreach(items as item)
+        <p>{{ item.name }}</p>
+    @endforeach
+</div>

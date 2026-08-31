@@ -1,0 +1,8 @@
+<template>
+    <div class="ast-1">
+        <h1>This is title</h1>
+        <p>This is content</p>
+        <button>Click me</button>
+        @children
+    </div>
+</template>

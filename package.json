@@ -1,0 +1,51 @@
+{
+    "name": "@saolabs/builder",
+    "version": "1.0.1",
+    "description": "Saola Builder - builds .sao applications with the saola/compiler Composer package",
+    "main": "src/index.js",
+    "exports": {
+        ".": "./src/index.js",
+        "./vite": "./src/vite-plugin.js",
+        "./webpack": "./src/webpack-plugin.js",
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "src/"
+    ],
+    "type": "commonjs",
+    "scripts": {
+        "test": "node src/test.js",
+        "publish-dry-run": "npm publish --dry-run",
+        "prepublishOnly": "npm test && echo 'Ready to publish @saolabs/builder'"
+    },
+    "keywords": [
+        "saolabs",
+        "saola builder",
+        "builder",
+        "blade",
+        "javascript",
+        "template"
+    ],
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/saolabs/saola-builder.git"
+    },
+    "author": "Sao Labs <saolaxoder@gmail.com>",
+    "bugs": {
+        "url": "https://github.com/saolabs/saola-builder/issues"
+    },
+    "homepage": "https://github.com/saolabs/saola-builder#readme",
+    "bin": {
+        "sao-compile": "src/cli.js",
+        "sao-build": "src/build-cli.js",
+        "sao-dev": "src/dev-cli.js"
+    },
+    "directories": {
+        "doc": "docs",
+        "example": "examples"
+    },
+    "dependencies": {
+        "chokidar": "^3.6.0"
+    }
+}

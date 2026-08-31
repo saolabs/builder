@@ -1,0 +1,21 @@
+@state(count = 0)
+@state(name = 'World')
+
+@extends(__layout__ + 'test-yield-layout')
+@block('title')
+    Page Title - {{ name }}
+@endblock
+@block('nav')
+    <a href="/">Home</a>
+    <a href="/about">About</a>
+@endblock
+@block('content')
+    <div class="content-area">
+        <h2>Hello, {{ name }}!</h2>
+        <p>Count: {{ count }}</p>
+        <button @click(setCount(count + 1))>Increment</button>
+    </div>
+@endblock
+@block('footer')
+    <p>Custom Footer for {{ name }}</p>
+@endblock

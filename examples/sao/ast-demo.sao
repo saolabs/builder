@@ -1,0 +1,18 @@
+@import(__template__ + 'ast1')
+@import(__template__ + 'ast2')
+@import(__template__ + 'ast3')
+
+@props({
+    test: "test",
+    test1: "test1"
+})
+<template>
+    <div class="ast-demo">
+        <p>{{ test }}</p>
+        <p>{{ test1 }}</p>
+        <ast1>
+            <ast2 />
+            <ast3 />
+        </ast1>
+    </div>
+</template>

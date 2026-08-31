@@ -1,0 +1,49 @@
+@const(
+    [$users, $setUsers] = useState([]), 
+    [$isLoading, $setIsLoading] = useState(true),
+    [$error, $setError] = useState(null)
+)
+<blade>
+    @extends($__layout__ . 'base')
+    @section('meta:title', 'Demo Fetch Users')
+    @block('content')
+        <div class="container py-5">
+            <h1 class="mb-4">Fetch Users Demo</h1>
+
+            @if($isLoading)
+                <div class="alert alert-info">Đang tải users...</div>
+            @elseif ($error)
+                <div class="alert alert-danger">Error: {{ $error }}</div>
+            @elseif (!$users || count($users) === 0)
+                <div class="alert alert-danger">Error không có users</div>
+            @else
+                @foreach ($users as $user)
+                    <div class="user-card mb-3 p-3 border rounded">
+                        <h6>{{ $user['name'] }}</h6>
+                        <p class="mb-1">{{ $user['email'] }}</p>
+                        <small class="text-muted">{{ $user['company']['name'] }}</small>
+                    </div>
+                @endforeach
+            @endif
+        </div>
+    @endblock
+</blade>
+<script setup>
+    export default {
+        
+        async init() {
+            try {
+                const response = await this.App.Http.get('https://jsonplaceholder.typicode.com/users');
+                if (response && Array.isArray(response.data)) {
+                    setUsers(response.data);
+                } else {
+                    setError('Invalid data format received.');
+                }
+            } catch (err) {
+                setError(err.message || 'Error fetching users.');
+            } finally {
+                setIsLoading(false);
+            }
+        }
+    }
+</script>

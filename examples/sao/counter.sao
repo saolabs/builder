@@ -1,0 +1,46 @@
+@props(a = 0, cProp = 0)
+@props({
+    b: 0,
+    d: 0
+})
+@states({
+    countState: 0,
+    eState: b
+})
+@const([count, setCount] = useState(0))
+@let(testVar = 'This is a test variable')
+@const([message, setMessage] = useState('Hello, Saola!'))
+@let(textContent = `${message} Count is ${count}`)
+<div class="counter-component">
+    <h4>Count: <span id="counter-value" data-count="{{ count }}">{{ count }}</span></h4>
+    <div class="btn-group">
+        <button class="btn btn-primary" @click(decrement())>-</button>
+        <button class="btn btn-primary" @click(increment())>+</button>
+        <button class="btn btn-primary" @click(reset())>Reset</button>
+    </div>
+</div>
+<script setup lang="ts">
+    export default{
+        data:{},
+        increment() {
+            setCount(count + 1);
+        },
+        decrement() {
+            setCount(count - 1);
+        },
+        reset() {
+            setCount(0);
+        }
+    }
+</script>
+<style scoped>
+    .counter-component {
+        text-align: center;
+        margin: 20px 0;
+    }.btn-group {
+        margin-top: 10px;
+    }
+    .btn {
+        margin: 0 5px;
+    }
+</style>

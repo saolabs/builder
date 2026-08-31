@@ -1,0 +1,85 @@
+@import(__template__ + 'sessions.tasks') {{-- khai báo để sử dụng template sessions.tasks như là thẻ html (<tasks>) --}}
+@import(__template__ + 'sessions.projects' as projects)
+@import({
+    counter: 'sessions.tasks.count',
+    demo: __template__ + 'demo.fetch'
+})
+@import(__layout__ + 'base' as baseLayout)
+@import(__blade_custom_path__ as alert)
+@let(name = 'John Doe')
+@let(posts = [
+    {title: 'Post 1', content: 'Content of post 1'},
+    {title: 'Post 2', content: 'Content of post 2'},
+    {title: 'Post 3', content: 'Content of post 3'},
+])
+<template>
+    @exec(a = 10, b = 20, c = a + b)
+    <div>
+        <p>Value of a: {{ a }}</p>
+        <p>Value of b: {{ b }}</p>
+        <p>Value of c (a + b): {{ c }}</p>
+    </div>
+    <div>
+        @exec(email = 'Jane Smith', age = 30)
+        <p>Name: {{ name }}</p>
+        <p>Email: {{ email }}</p>
+        <p>Age: {{ age }}</p>
+    </div>
+    <tasks>
+        <demo :users="users" />
+    </tasks>
+    <tasks title="'Custom Task List'" />
+    <projects :projects="projects">
+        <div class="header">
+            <h2>My Projects @if(!(t = count(projects))) Rỗng @else ({{ t }}) @endif</h2>
+        </div>
+        <div class="footer">
+            <p>Total Projects: {{ count(projects) }}</p>
+        </div>
+        <tasks :owners="['Alice', 'Bob']">
+            <div class="header">
+                <h3>Task Owners</h3>
+                <p>{{content}}</p>
+                @exec(test = 'Hello World')
+                @foreach(posts as post)
+                    <p>{{content}}</p>
+                    @exec(content = 'This is a test')
+                    <p>{{ post.title }}: {{ post.content }} {{ content }}</p>
+                @endforeach
+            </div>
+            <p>{{content}}</p>
+            <demo :users="users" />
+            @if(!(person = getPerson()))
+                <p>No person found.</p>
+            @else
+                <p>Person found: {{ person.name }}</p>
+            @endif
+        </tasks>
+    </projects>
+    <counter></counter>
+    <demo></demo>
+    <alert type="success" message="This is a custom alert component!"></alert>
+</template>
+<script setup lang="ts">
+    import {_} from 'saola';
+    export default {
+        name: 'DemoAst',
+
+        doAction(action: string) {
+            if (action === 'login') {
+                alert('Login action triggered!');
+            } else if (action === 'fetchPosts') {
+                alert('Fetch Posts action triggered!');
+            }
+        },
+
+        mounting() {
+            console.log('DemoAst component mounted');
+        },
+
+        mounted() {
+            console.log('DemoAst component fully mounted');
+        }
+
+    }
+</script>

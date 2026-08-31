@@ -1,0 +1,165 @@
+@vars($users, $posts)
+@useState($editMode, false)
+@useState([
+    'todos' => [
+        ['id' => 1, 'task' => 'Buy groceries', 'completed' => false],
+        ['id' => 2, 'task' => 'Walk the dog', 'completed' => true],
+        ['id' => 3, 'task' => 'Read a book', 'completed' => false],
+    ],
+    'newTodo' => '',
+    'nextTodoIndex' => 4
+])
+@useState($products, [
+    ['id' => 1, 'name' => 'Apple', 'category' => 'fruit', 'price' => 2, 'tags' => ['red', 'sweet']],
+    ['id' => 2, 'name' => 'Carrot', 'category' => 'vegetable', 'price' => 1, 'tags' => ['orange']],
+    ['id' => 3, 'name' => 'Banana', 'category' => 'fruit', 'price' => 3, 'tags' => ['yellow', 'sweet', 'tropical']],
+    ['id' => 4, 'name' => 'Broccoli', 'category' => 'vegetable', 'price' => 4, 'tags' => ['green', 'healthy']]
+])
+@useState($inventory, [
+    ['id' => 1, 'name' => 'Apple', 'category' => 'fruit', 'price' => 2, 'tags' => ['red', 'sweet']],
+    ['id' => 2, 'name' => 'Carrot', 'category' => 'vegetable', 'price' => 1, 'tags' => ['orange']],
+    ['id' => 3, 'name' => 'Banana', 'category' => 'fruit', 'price' => 3, 'tags' => ['yellow', 'sweet', 'tropical']],
+    ['id' => 4, 'name' => 'Broccoli', 'category' => 'vegetable', 'price' => 4, 'tags' => ['green', 'healthy']]
+])
+@useState($catalog, [
+    ['id' => 1, 'name' => 'Apple', 'category' => 'fruit', 'price' => 2, 'tags' => ['red', 'sweet']],
+    ['id' => 2, 'name' => 'Carrot', 'category' => 'vegetable', 'price' => 1, 'tags' => ['orange']],
+    ['id' => 3, 'name' => 'Banana', 'category' => 'fruit', 'price' => 3, 'tags' => ['yellow', 'sweet', 'tropical']],
+    ['id' => 4, 'name' => 'Broccoli', 'category' => 'vegetable', 'price' => 4, 'tags' => ['green', 'healthy']]
+])
+@const($MAX_COUNT = 10)
+@let($n = 0)
+<blade>
+    <div class="input-demo">
+        <h2>Input State Demo</h2>
+        <div class="users">
+            <h3>Users</h3>
+            <ul>
+                @foreach($users as $user)
+                    <li>{{ $user['name'] }} ({{ $user['email'] }})</li>
+                @endforeach
+            </ul>
+        </div>
+        <div class="posts">
+            <h3>Posts</h3>
+            <ul>
+                @foreach($posts as $post)
+                    <li><strong>{{ $post['title'] }}</strong>: {{ $post['content'] }}</li>
+                @endforeach
+            </ul>
+        </div>
+    </div>
+    <div class="todos-demo">
+        <h2>Todos</h2>
+        <ul>
+            @foreach($todos as $todo)
+                <li>
+                    <label>
+                        <input type="checkbox" @bind($todo['completed']) @checked($todo['completed']) />
+                        {{ $todo['task'] }}
+                    </label>
+                                        
+                </li>
+            @endforeach
+        </ul>
+        <div @class(['is-edit-mode'])>
+            <input type="text" @bind($newTodo) placeholder="Nhập công việc mới" @keydown(handleNewTodoKeyDown($event)) />
+            <button @click(addTodo())>+</button>
+        </div>
+    </div>
+    <div class="products-demo">
+        <h2>Products {{ count($products) }}</h2>
+        @if(count($products) === 0)
+            <p>No products available.</p>
+        @else
+            <ul>
+                @foreach($products as $product)
+                    <li>
+                        {{ $product['name'] }} - ${{ $product['price'] }}
+                        @if($product['tags'] && count($product['tags']) > 0)
+                            <div class="tags">
+                                @foreach($product['tags'] as $tag)
+                                    <span class="tag">{{ $tag }}</span>
+                                @endforeach
+                            </div>
+                        @endif
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </div>
+    {{-- for --}}
+    <div class="for-loop">
+        <h2>Inventory (For Loop Demo)</h2>
+        <ul>
+            @for($i = 0; $i < count($inventory); $i++)
+                <li>
+                    {{ $inventory[$i]['name'] }} - ${{ $inventory[$i]['price'] }}
+                    @if($inventory[$i]['tags'] && count($inventory[$i]['tags']) > 0)
+                        <div class="tags">
+                            @for($j = 0; $j < count($inventory[$i]['tags']); $j++)
+                                <span class="tag">{{ $inventory[$i]['tags'][$j] }}</span>
+                            @endfor
+                        </div>
+                    @endif
+                </li>
+            @endfor
+        </ul>
+    </div>
+    {{-- while --}}
+    <div class="while-loop">
+        <h2>Catalog (While Loop Demo)</h2>
+        <ul>
+            @for($i = 0; $i < $MAX_COUNT; $i++)
+                @if($i >= count($catalog))
+                    @break
+                @endif
+                <li>
+                    {{ $catalog[$i]['name'] }} - ${{ $catalog[$i]['price'] }}
+                    @if($catalog[$i]['tags'] && count($catalog[$i]['tags']) > 0)
+                        <div class="tags">
+                            @for($j = 0; $j < count($catalog[$i]['tags']); $j++)
+                                <span class="tag">{{ $catalog[$i]['tags'][$j] }}</span>
+                            @endfor
+                        </div>
+                    @endif
+                </li>
+            @endfor
+        </ul>
+        @exec($n = 0)
+        <h3>While Loop Example</h3>
+        <ul>
+            @while($n < $MAX_COUNT)
+                <li>
+                    Item #{{ $n + 1 }}
+                </li>
+                @exec($n++)
+            @endwhile
+        </ul>
+    </div>
+    @include('esamples/partial.sao', ['data' => $products])
+    {{-- Level 1: @if block --}}
+</blade>
+<script setup lang="ts">
+import { ref } from 'saola';
+export default {
+    methods: {
+        handleNewTodoKeyDown(event: KeyboardEvent) {
+            if (event.key === 'Enter') {
+                this.addTodo();
+            }
+        },
+        addTodo() {
+            if (this.newTodo.trim() !== '') {
+                this.todos.push({
+                    id: this.nextTodoIndex,
+                    task: this.newTodo.trim(),
+                    completed: false
+                });
+                this.nextTodoIndex++;
+                this.newTodo = '';
+            }
+        }
+    }
+};
+</script>

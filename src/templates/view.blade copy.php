@@ -1,0 +1,5 @@
+@exec($__ONE_COMPONENT_REGISTRY__ = [ONE_COMPONENT_REGISTRY]) {{-- Khai báo để sử dụng các component đã đăng ký trong $__ONE_COMPONENT_REGISTRY__ --}}
+
+[BLADE_DECLARATIONS]
+[BLADE_SSR_CONTENT]
+[BLADE_TEMPLATE_CONTENT]

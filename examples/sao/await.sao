@@ -1,0 +1,21 @@
+@vars(user = null, counter = 0)
+@await
+@extends('layout')
+@block('content')
+    <div>
+        @if(user)
+            <h1>Welcome {{ user.name }}</h1>
+        @else
+            <p>Please login first</p>
+        @endif
+    </div>
+    <div>
+        <button @click(doAction("login"))>Login</button>
+        <button @click(doAction("incrementCounter"))>Increment Counter</button>
+        <p>Counter: {{ counter }}</p>
+    </div>
+@endblock
+@block('footer')
+    <footer>Copyright 2026</footer>
+@endblock
+@section('sidebar', 'posts')

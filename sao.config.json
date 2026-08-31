@@ -1,0 +1,82 @@
+{
+  "packages": {
+    "saola": "1.0.0"
+  },
+  "root": "resources/saola/app",
+  "output": {
+    "base": "public/static/saola",
+    "default": "public/static/saola/app",
+    "contexts": {
+      "admin": "public/static/saola/admin",
+      "web": "public/static/saola/web",
+      "mobile": "public/static/saola/mobile",
+      "default": "public/static/saola/app"
+    }
+  },
+  "contexts": {
+    "web": {
+      "name": "Web",
+      "app": ["resources/saola/app/web/app"],
+      "views": {
+        "web": "resources/saola/app/web/views"
+      },
+      "blade": {
+        "web": "resources/views/web"
+      },
+      "temp": {
+        "views": "resources/saola/js/temp/web/views",
+        "registry": "resources/saola/js/temp/web/registry.js"
+      }
+    },
+    "admin": {
+      "name": "Admin Panel",
+      "app": ["resources/saola/app/admin/app"],
+      "views": {
+        "admin": "resources/saola/app/admin/views"
+      },
+      "blade": {
+        "admin": "resources/views/admin"
+      },
+      "temp": {
+        "views": "resources/saola/js/temp/admin/views",
+        "registry": "resources/saola/js/temp/admin/registry.js"
+      }
+    },
+    "mobile": {
+      "name": "Mobile",
+      "app": ["resources/saola/app/mobile/app"],
+      "views": {
+        "mobile": "resources/saola/app/mobile/views"
+      },
+      "blade": {
+        "mobile": "resources/views/mobile"
+      },
+      "temp": {
+        "views": "resources/saola/js/temp/mobile/views",
+        "registry": "resources/saola/js/temp/mobile/registry.js"
+      }
+    },
+    "default": {
+      "name": "All Contexts",
+      "app": [
+        "resources/saola/app/admin/app",
+        "resources/saola/app/web/app",
+        "resources/saola/app/mobile/app"
+      ],
+      "views": {
+        "web": "resources/saola/app/web/views",
+        "admin": "resources/saola/app/admin/views",
+        "mobile": "resources/saola/app/mobile/views"
+      },
+      "blade": {
+        "web": "resources/views/web",
+        "admin": "resources/views/admin",
+        "mobile": "resources/views/mobile"
+      },
+      "temp": {
+        "views": "resources/saola/js/temp/default/views",
+        "registry": "resources/saola/js/temp/default/registry.js"
+      }
+    }
+  }
+}

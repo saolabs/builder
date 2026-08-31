@@ -1,0 +1,92 @@
+@vars($users = [])
+@const([$todos, $setTodos] = useState([]))
+@const([$newTodo, $setNewTodo] = useState(''))
+@const([$todoIndex, $setTodoIndex] = useState(0))
+@await
+<blade>
+    <div class="col-lg-6 mb-4" data-category="basic forms">
+        <div class="example-card">
+            <div class="example-header">
+                <h3>Todo List</h3>
+                <div class="example-tags">
+                    <span class="tag tag-basic">Basic</span>
+                    <span class="tag tag-forms">Forms</span>
+                    <span class="tag tag-list">Lists</span>
+                </div>
+            </div>
+
+            <div class="example-description">
+                <p>Interactive todo list with add, toggle, and delete functionality.</p>
+            </div>
+
+            <div class="example-demo">
+                <div class="demo-container" id="todo-demo">
+                    <div class="todo-app">
+                        <div class="input-group mb-3">
+                            <input type="text" id="todo-input" class="form-control" placeholder="Add new todo..." @bind($newTodo) @keydown(addTodoByEnter(@event))>
+                            <button class="btn btn-primary" @click(addTodo())>Add</button>
+                        </div>
+                        <ul id="todo-list" class="list-unstyled">
+                            @foreach ($todos as $todo)
+                                <li class="todo-item {{ $todo['completed'] ? 'completed' : '' }}">
+                                    <input type="checkbox" @change(toggleTodo($todo['id'])) @checked($todo['completed'])>
+                                    {{ $todo['text'] }}
+                                    <button class="btn btn-sm btn-outline-danger" @click(deleteTodo($todo['id']))>×</button>
+                                </li>
+                            @endforeach
+
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</blade>
+
+<script setup>
+    export default {
+        addTodo() {
+            if (newTodo.trim()) {
+                const _newTodos = [...todos, {
+                    id: todoIndex,
+                    text: newTodo,
+                    completed: false
+                }];
+                setTodos(_newTodos);
+                setNewTodo('');
+                setTodoIndex(todoIndex + 1);
+            }
+        },
+        toggleTodo(index) {
+            const updatedTodos = [...todos];
+            updatedTodos[index].completed = !updatedTodos[index].completed;
+            setTodos(updatedTodos);
+        },
+        deleteTodo(index) {
+            const filteredTodos = todos.filter((_, i) => i !== index);
+            setTodos(filteredTodos);
+        },
+        addTodoByEnter(event) {
+            if (event.key === 'Enter') {
+                this.addTodo();
+            }
+        }
+    }
+</script>
+
+<style>
+    .todo-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .todo-item.completed .todo-text {
+        text-decoration: line-through;
+        opacity: 0.6;
+    }
+</style>

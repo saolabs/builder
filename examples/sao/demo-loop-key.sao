@@ -1,0 +1,38 @@
+@props({
+    posts: [],
+    categories: [],
+    postCategories: [],
+    postTags: [],
+    postAuthors: [],
+})
+@states({
+    postList: posts,
+    categoryList: categories
+})
+
+@let(i = 0)
+
+<template>
+    <div @class({'flex', 'flex-col', 'gap-2'})>
+        @for(i = 0; i < 10; i++)
+            <div @class({'flex', 'items-center', 'gap-2'})>
+                <h2 @class({'text-sm'})>Title {{ i }}</h2>
+                @foreach(categoryList as categoryItem)
+                    @key(categoryItem.id)
+                    <div class="category-item">
+                        <h3 class="category-name">{{ categoryItem.name }}</h3>
+                        <div class="post-list">
+                            @foreach(categoryItem.posts as postItem)
+                                @key(postItem.id)
+                                <div class="post-item">
+                                    <h4 class="post-title">{{ postItem.title }}</h4>
+                                    <p class="post-content">{{ postItem.content }}</p>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        @endfor
+    </div>
+</template>

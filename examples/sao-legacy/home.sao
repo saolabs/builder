@@ -1,0 +1,32 @@
+@import($__template__.'sessions.tasks') {{-- khai báo để sử dụng template sessions.tasks như là thẻ html (<tasks>) thay vì dùng @include($__template__.'sessions.tasks', [...) --}}
+@import($__template__.'sessions.projects' as projects) {{-- khai báo để sử dụng template sessions.projects như là thẻ html (<projects>) thay vì dùng @include($__template__.'sessions.projects', [...) --}}
+@import([
+    'counter' => 'sessions.tasks.count', // sử dụng component counter từ thư mục sessions/tasks/count.sao khi sử dụng sẽ dùng <counter .../> hoặc <counter ...>...</counter> thay cho @include('sessions.tasks.count', [...])
+    'demo' => $__template__.'demo.fetch' // sử dụng component demo từ thư mục demo/fetch.sao khi sử dụng sẽ dùng <demo .../> hoặc <demo ...>...</demo> thay cho @include('demo.fetch', [...])
+])
+@import($__layout__.'base' as baseLayout) {{-- khai báo để sử dụng layout base như là thẻ html (<baseLayout>) thay vì dùng @include($__layout__.'base') --}}
+@import($__blade_custom_path__ as alert) {{-- khai báo để sử dụng component alert từ thư mục custom path như là thẻ html (<alert>) thay vì dùng @include($__blade_custom_path__, [...]) --}}
+
+<blade>
+    <tasks>
+        <demo :users="$users" />
+    </tasks>
+    <tasks title="'Custom Task List'" />
+    <projects :projects="$projects">
+        <div class="header">
+            <h2>My Projects</h2>
+        </div>
+        <div class="footer">
+            <p>Total Projects: {{ count($projects) }}</p>
+        </div>
+        <tasks :owners="['Alice', 'Bob']">
+            <div class="header">
+                <h3>Task Owners</h3>
+            </div>
+            <demo :users="$users" />
+        </tasks>
+    </projects>
+    <counter></counter>
+    <demo></demo>
+    <alert type="success" message="This is a custom alert component!"></alert>
+</blade>

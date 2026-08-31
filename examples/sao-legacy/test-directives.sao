@@ -1,0 +1,22 @@
+@useState($count, 0)
+@let($message = 'Hello')
+@const($MAX = 100)
+@vars($temp)
+
+<div class="test-component">
+    <h3>State: {{ $count }}</h3>
+    <p>Message: {{ $message }}</p>
+    <p>Max: {{ $MAX }}</p>
+    
+    @if($count > 5)
+        <div>Count is greater than 5</div>
+    @else
+        <div>Count is 5 or less</div>
+    @endif
+    
+    @foreach([1, 2, 3] as $item)
+        <div>Item: {{ $item }}</div>
+    @endforeach
+    
+    <button @click($setCount($count + 1))>Increment</button>
+</div>

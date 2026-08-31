@@ -1,0 +1,19 @@
+@pageStart
+{{-- Layout template sử dụng @yield --}}
+
+<div class="app-layout">
+    <header>
+        <h1>@yield('title', 'Default Title')</h1>
+        <nav>@yield('nav')</nav>
+    </header>
+
+    <main>
+        @yield('content')
+    </main>
+
+    <footer>
+        @yield('footer', '<p>Default Footer</p>')
+    </footer>
+</div>
+
+@pageEnd
