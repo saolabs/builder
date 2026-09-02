@@ -184,7 +184,12 @@ export default ViewRegistry;
         return parts.map(part => {
             // Convert part to PascalCase (handle hyphens/underscores)
             // Preserve internal capitals: useState → UseState
-            return part.split(/[-_]/)
+            //
+            // Dấu chấm cũng phải tách: namespace theme là "themes.aurora", để
+            // nguyên thì sinh ra `import Themes.auroraModulesPingIndex` — không
+            // phải định danh JS hợp lệ, cả file registry vỡ.
+            return part.split(/[-_.]/)
+                .filter(word => word)
                 .map(word => word.charAt(0).toUpperCase() + word.slice(1))
                 .join('');
         }).join('');
