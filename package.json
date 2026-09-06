@@ -14,7 +14,7 @@
     ],
     "type": "commonjs",
     "scripts": {
-        "test": "node src/test.js",
+        "test": "node src/test.js && node tests/test_typed_output.js",
         "publish-dry-run": "npm publish --dry-run",
         "prepublishOnly": "npm test && echo 'Ready to publish @saolabs/builder'"
     },

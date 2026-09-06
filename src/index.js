@@ -326,9 +326,7 @@ class Compiler {
             : path.dirname(relativePath);
         const langMatch = fileContent.match(/<script\s+setup\b[^>]*\blang=["']?([^"'\s>]+)["']?/i);
         const isTypeScript = !!langMatch && ['ts', 'typescript'].includes(langMatch[1].toLowerCase());
-        const jsFileExt = isTypeScript ? '.ts' : '.js';
-        const jsFileName = fileNameNoExt + jsFileExt;
-        const jsPath = path.join(compiledViewsDir, jsRelativeDir, jsFileName);
+
 
         const result = await this.compileWithPhp(fileContent, {
             viewPath,
@@ -341,11 +339,20 @@ class Compiler {
             assetPrefix
         });
 
+        const jsFileExt = result.lang === 'ts' || isTypeScript ? '.ts' : '.js';
+        const jsPath = path.join(compiledViewsDir, jsRelativeDir, fileNameNoExt + jsFileExt);
+
         this.ensureDir(path.dirname(bladePath));
         this.ensureDir(path.dirname(jsPath));
         fs.writeFileSync(bladePath, result.blade, 'utf-8');
         this.writtenBlade?.add(path.resolve(bladePath));
         fs.writeFileSync(jsPath, result.js, 'utf-8');
+        // A declaration annotation can switch an existing generated view to TS.
+        const alternatePath = path.join(compiledViewsDir, jsRelativeDir, fileNameNoExt + (jsFileExt === '.ts' ? '.js' : '.ts'));
+        if (fs.existsSync(alternatePath)) {
+            const previous = fs.readFileSync(alternatePath, 'utf-8');
+            if (previous.includes(`const __VIEW_PATH__ = '${viewPath}';`)) fs.unlinkSync(alternatePath);
+        }
         console.log(`  ✓ ${viewPath}`);
 
         const actualPath = path.relative(compiledViewsDir, jsPath);
