@@ -20,8 +20,8 @@ function minifyHtmlTemplate(html) {
     result = result.replace(/<!--(?!\[if)[\s\S]*?-->/g, '');
 
     // 2. Collapse multiple whitespace between tags to single space
-    // But preserve whitespace inside <pre>, <code>, <textarea>, <script>, <style>
-    const preserveTags = ['pre', 'code', 'textarea', 'script', 'style'];
+    // But preserve whitespace inside <pre>, <code>, <textarea>, <script>, <style>, <code-block>, <code-window>
+    const preserveTags = ['pre', 'code', 'textarea', 'script', 'style', 'code-block', 'code-window'];
     const preserved = [];
     
     // Temporarily replace content of preserve tags
@@ -85,6 +85,9 @@ function processTemplateStrings(source) {
         // Look for backtick
         if (source[i] === '`') {
             const start = i;
+            // Check preceding token: if this backtick is an argument to this.text(...) or text(...), it's a literal text node, not HTML markup
+            const prefix = source.substring(Math.max(0, start - 40), start);
+            const isTextCall = /(?:this\.)?text\s*\(\s*$/.test(prefix);
             i++; // Move past opening backtick
             
             let template = '';
@@ -131,8 +134,8 @@ function processTemplateStrings(source) {
                 i++;
             }
             
-            // Check if this template contains HTML
-            if (/<[a-z]/i.test(template)) {
+            // Check if this template contains HTML (and is not an AST text node argument)
+            if (!isTextCall && /<[a-z]/i.test(template)) {
                 // Minify the HTML content
                 const minified = minifyHtmlTemplate(template);
                 result.push('`' + minified + '`');
@@ -159,6 +162,11 @@ function htmlTemplateMinifyPlugin() {
         setup(build) {
             // Only process .ts and .js files
             build.onLoad({ filter: /\.(ts|js)$/ }, async (args) => {
+                // Do not process views: they use AST calls (this.html, this.text), any string with <tag is literal text
+                if (args.path.includes('/views/') || args.path.includes('\\views\\')) {
+                    return null;
+                }
+
                 const fs = require('fs');
                 const source = fs.readFileSync(args.path, 'utf8');
                 
