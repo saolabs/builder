@@ -184,6 +184,7 @@ class Compiler {
 
         let totalFiles = 0;
         const processPromises = [];
+        const failures = [];
 
         // Process each namespace
         for (const namespace of namespaces) {
@@ -225,6 +226,7 @@ class Compiler {
                         ).catch(error => {
                             const relativePath = path.relative(viewsDir, saoFilePath);
                             console.error(`  ✗ ${namespace}.${relativePath}: ${error.message}`);
+                            failures.push(`${namespace}.${relativePath}`);
                         })
                     );
                 }
@@ -238,6 +240,15 @@ class Compiler {
 
         // Wait for all files to complete
         await Promise.all(processPromises);
+
+        // View lỗi vẫn được đếm vào totalFiles, nên báo "Successfully compiled
+        // ${totalFiles}" là nói dối — và exit 0 khiến `npm run check`/CI đi tiếp
+        // với view thiếu. Lỗi biên dịch phải dừng build.
+        if (failures.length > 0) {
+            console.error(`\n❌ ${failures.length}/${totalFiles} file lỗi trong context ${contextName}:`);
+            for (const f of failures) console.error(`   ✗ ${f}`);
+            throw new Error(`${failures.length} file .sao biên dịch lỗi (context: ${contextName})`);
+        }
 
         console.log(`\n✅ Successfully compiled ${totalFiles} files for context: ${contextName}`);
         
