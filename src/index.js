@@ -18,7 +18,6 @@ const { spawn } = require('child_process');
 const crypto = require('crypto');
 const ConfigManager = require('./config-manager');
 const { RegistryGenerator } = require('./registry-generator');
-const SaolaPreprocessor = require('./preprocessor');
 
 /**
  * Làm trắng vùng `{{-- --}}` và `@verbatim`, GIỮ NGUYÊN độ dài.
@@ -91,7 +90,6 @@ class Compiler {
         this.phpWorkerPending = new Map();
         this.compiledViews = {}; // Track compiled views per context
         this.compiledContexts = []; // Track which contexts were compiled in this run
-        this.preprocessor = new SaolaPreprocessor();
     }
 
     /**
