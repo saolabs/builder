@@ -78,7 +78,7 @@ class Compiler {
      * một bản vá không đụng tới sinh id thì không được làm chết mọi theme đang
      * chạy. Mỗi lần tăng phải ghi lý do ở docs/RUNTIME_CONTRACT.md.
      */
-    static OUTPUT_CONTRACT = 1;
+    static OUTPUT_CONTRACT = 2; // RCDATA content + stable foreach row identity/scope (2026-10-01).
 
     constructor() {
         this.watcherInstances = [];
@@ -1470,6 +1470,7 @@ ${hasApp ? `    providers: themeApp?.providers ?? [],
      */
     writeThemeManifest(projectRoot, paths, contextConfig) {
         const t = this.themeConfig || {};
+        const generatedAt = new Date().toISOString();
         const manifest = {
             slug: t.slug || null,
             name: t.name || null,
@@ -1477,10 +1478,10 @@ ${hasApp ? `    providers: themeApp?.providers ?? [],
             context: t.context || 'web',
             contract: Compiler.OUTPUT_CONTRACT,
             idMode: this.compilerOptions?.idMode || 'terse',
-            revision: crypto.createHash('sha256')
-                .update(JSON.stringify({ t, at: Date.now() }))
-                .digest('hex').slice(0, 16),
-            generatedAt: new Date().toISOString(),
+            builder: this.readPackageVersion(path.join(__dirname, '..')),
+            runtime: this.readPackageVersion(path.join(projectRoot, 'node_modules', '@saolabs', 'client')),
+            revision: this.createBuildRevision({ theme: t, generatedAt }),
+            generatedAt,
         };
 
         const distBase = path.resolve(projectRoot, t.dist || 'dist');
@@ -1500,18 +1501,16 @@ ${hasApp ? `    providers: themeApp?.providers ?? [],
      * lệch và hydrate nhân đôi DOM mà KHÔNG có lỗi nào. Xem §8.3.
      */
     writeBuildManifest(projectRoot, paths) {
-        const readVersion = (pkgDir) => {
-            try {
-                return JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8')).version || null;
-            } catch { return null; }
-        };
-
+        const generatedAt = new Date().toISOString();
+        const builder = this.readPackageVersion(path.join(__dirname, '..'));
+        const runtime = this.readPackageVersion(path.join(projectRoot, 'node_modules', '@saolabs', 'client'));
         const manifest = {
             contract: Compiler.OUTPUT_CONTRACT,
             idMode: this.compilerOptions?.idMode || 'terse',
-            builder: readVersion(path.join(__dirname, '..')),
-            runtime: readVersion(path.join(projectRoot, 'node_modules', '@saolabs', 'client')),
-            generatedAt: new Date().toISOString(),
+            builder,
+            runtime,
+            revision: this.createBuildRevision({ builder, runtime, generatedAt }),
+            generatedAt,
         };
 
         const publicBase = path.resolve(projectRoot, paths.public || 'public/static/saola');
@@ -1522,6 +1521,22 @@ ${hasApp ? `    providers: themeApp?.providers ?? [],
         } catch (e) {
             console.warn(`   ⚠️  Không ghi được saola.json: ${e.message}`);
         }
+    }
+
+    readPackageVersion(pkgDir) {
+        try {
+            return JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8')).version || null;
+        } catch {
+            return null;
+        }
+    }
+
+    createBuildRevision(seed) {
+        return crypto.createHash('sha256')
+            .update(JSON.stringify(seed))
+            .update(crypto.randomBytes(16))
+            .digest('hex')
+            .slice(0, 16);
     }
 
     /**
