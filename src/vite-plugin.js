@@ -177,8 +177,10 @@ function saolaPlugin(options = {}) {
 
         // Transform to minify HTML in templates
         transform(code, id) {
-            if (!minifyHtml) return null;
+            // Never minify HTML in dev mode or in compiled Saola views (their strings are AST text nodes)
+            if (!minifyHtml || isDevMode) return null;
             if (!id.endsWith('.ts') && !id.endsWith('.js')) return null;
+            if (id.includes('/views/') || id.includes('\\views\\')) return null;
             if (!code.includes('`') || !/<[a-z]/i.test(code)) return null;
 
             try {

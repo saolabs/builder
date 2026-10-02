@@ -15,9 +15,9 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const crypto = require('crypto');
 const ConfigManager = require('./config-manager');
 const { RegistryGenerator } = require('./registry-generator');
-const SaolaPreprocessor = require('./preprocessor');
 
 /**
  * Làm trắng vùng `{{-- --}}` và `@verbatim`, GIỮ NGUYÊN độ dài.
@@ -70,6 +70,16 @@ function matchOutsideComments(regex, content) {
 }
 
 class Compiler {
+    /**
+     * Số hiệu hợp đồng ĐẦU RA của compiler: định dạng marker, thuật toán sinh
+     * id, API runtime mà JS compiled gọi, và hợp đồng bundle.
+     *
+     * TĂNG TAY khi một trong bốn thứ đó đổi — KHÔNG bám theo version package:
+     * một bản vá không đụng tới sinh id thì không được làm chết mọi theme đang
+     * chạy. Mỗi lần tăng phải ghi lý do ở docs/RUNTIME_CONTRACT.md.
+     */
+    static OUTPUT_CONTRACT = 2; // RCDATA content + stable foreach row identity/scope (2026-10-01).
+
     constructor() {
         this.watcherInstances = [];
         this.projectRoot = process.cwd();
@@ -80,7 +90,6 @@ class Compiler {
         this.phpWorkerPending = new Map();
         this.compiledViews = {}; // Track compiled views per context
         this.compiledContexts = []; // Track which contexts were compiled in this run
-        this.preprocessor = new SaolaPreprocessor();
     }
 
     /**
@@ -135,6 +144,12 @@ class Compiler {
     async buildContextWithoutViewsUpdate(config, projectRoot, contextName) {
         this.projectRoot = projectRoot;
         this.resolvePhpCompilerPath(projectRoot);
+        // idMode phải KHỚP giữa lúc compile và lúc app chạy, và phải khớp giữa
+        // app với mọi theme cài vào. Biến môi trường vô hình là cơ chế sai cho
+        // một giá trị như vậy — đọc từ config, và ghi ra artifact ở Phase 2.
+        this.compilerOptions = { idMode: 'terse', ...(config.compiler || {}) };
+        // `theme` trong sao.config.json => đang build một GÓI THEME, không phải app.
+        this.themeConfig = config.theme || null;
         const contexts = config.contexts || {};
         const paths = config.paths || {};
 
@@ -153,6 +168,9 @@ class Compiler {
         
         // Initialize compiled views tracking for this context
         this.compiledViews[contextName] = [];
+        // Blade đã sinh trong LƯỢT NÀY — dùng để quét file mồ côi SAU khi
+        // compile, thay vì xoá sạch cây TRƯỚC khi compile.
+        this.writtenBlade = new Set();
         
         // Process all namespace views
         const namespaces = Object.keys(contextConfig.views || {});
@@ -164,6 +182,7 @@ class Compiler {
 
         let totalFiles = 0;
         const processPromises = [];
+        const failures = [];
 
         // Process each namespace
         for (const namespace of namespaces) {
@@ -205,6 +224,7 @@ class Compiler {
                         ).catch(error => {
                             const relativePath = path.relative(viewsDir, saoFilePath);
                             console.error(`  ✗ ${namespace}.${relativePath}: ${error.message}`);
+                            failures.push(`${namespace}.${relativePath}`);
                         })
                     );
                 }
@@ -219,13 +239,34 @@ class Compiler {
         // Wait for all files to complete
         await Promise.all(processPromises);
 
+        // View lỗi vẫn được đếm vào totalFiles, nên báo "Successfully compiled
+        // ${totalFiles}" là nói dối — và exit 0 khiến `npm run check`/CI đi tiếp
+        // với view thiếu. Lỗi biên dịch phải dừng build.
+        if (failures.length > 0) {
+            console.error(`\n❌ ${failures.length}/${totalFiles} file lỗi trong context ${contextName}:`);
+            for (const f of failures) console.error(`   ✗ ${f}`);
+            throw new Error(`${failures.length} file .sao biên dịch lỗi (context: ${contextName})`);
+        }
+
         console.log(`\n✅ Successfully compiled ${totalFiles} files for context: ${contextName}`);
         
         // Copy app files to compiled.app
         await this.copyAppFiles(contextConfig, projectRoot, paths, contextName);
         
+        // Quét Blade mồ côi — SAU khi ghi xong, không phải xoá cây trước.
+        this.sweepOrphanBlade(contextConfig, projectRoot, paths);
+
         // Generate registry after all views compiled
         await this.generateRegistry(contextConfig, projectRoot, paths, contextName);
+
+        // Entry — gói THEME sinh `main.js` (một defineBundle), app sinh
+        // `app.{ctx}.js` (bundle runtime + boot). Xem §8.5.1.
+        if (this.themeConfig) {
+            await this.generateThemeEntry(contextConfig, projectRoot, paths, contextName);
+        } else {
+            await this.generateAppEntry(contextConfig, projectRoot, paths, contextName);
+            this.writeBuildManifest(projectRoot, paths);
+        }
         
         // Track this context as compiled
         if (!this.compiledContexts.includes(contextName)) {
@@ -269,7 +310,12 @@ class Compiler {
     async processSaoFile(saoFilePath, viewsDir, namespace, contextName, contextConfig, projectRoot, paths) {
         const fileContent = fs.readFileSync(saoFilePath, 'utf-8');
         const publicUrlBase = String(paths.public || 'public/static/saola').replace(/^\/?public\/+/, '');
-        const assetPrefix = `${publicUrlBase.replace(/\/?$/, '')}/${contextName}/assets/`;
+        // Theme có kho asset riêng: `asset('logo.svg')` trong theme mà dùng prefix
+        // của context sẽ trỏ vào assets của APP — hoặc 404, hoặc tệ hơn là hiện
+        // đúng file của app mà không ai nhận ra. Xem EXTENSION_ARCHITECTURE §8.5.5.
+        const themeMatch = /^themes\.([A-Za-z0-9_-]+)/.exec(namespace);
+        const assetScope = themeMatch ? `themes/${themeMatch[1]}` : contextName;
+        const assetPrefix = `${publicUrlBase.replace(/\/?$/, '')}/${assetScope}/assets/`;
         const relativePath = path.relative(viewsDir, saoFilePath);
         const fileNameNoExt = path.basename(saoFilePath, '.sao');
         const dirPath = path.dirname(relativePath);
@@ -289,9 +335,7 @@ class Compiler {
             : path.dirname(relativePath);
         const langMatch = fileContent.match(/<script\s+setup\b[^>]*\blang=["']?([^"'\s>]+)["']?/i);
         const isTypeScript = !!langMatch && ['ts', 'typescript'].includes(langMatch[1].toLowerCase());
-        const jsFileExt = isTypeScript ? '.ts' : '.js';
-        const jsFileName = fileNameNoExt + jsFileExt;
-        const jsPath = path.join(compiledViewsDir, jsRelativeDir, jsFileName);
+
 
         const result = await this.compileWithPhp(fileContent, {
             viewPath,
@@ -300,14 +344,24 @@ class Compiler {
             namespace: `${namespace}.`,
             emit: 'both',
             lang: isTypeScript ? 'ts' : 'js',
-            idMode: process.env.SAOLA_ID_MODE || 'terse',
+            idMode: this.compilerOptions?.idMode || 'terse',
             assetPrefix
         });
+
+        const jsFileExt = result.lang === 'ts' || isTypeScript ? '.ts' : '.js';
+        const jsPath = path.join(compiledViewsDir, jsRelativeDir, fileNameNoExt + jsFileExt);
 
         this.ensureDir(path.dirname(bladePath));
         this.ensureDir(path.dirname(jsPath));
         fs.writeFileSync(bladePath, result.blade, 'utf-8');
+        this.writtenBlade?.add(path.resolve(bladePath));
         fs.writeFileSync(jsPath, result.js, 'utf-8');
+        // A declaration annotation can switch an existing generated view to TS.
+        const alternatePath = path.join(compiledViewsDir, jsRelativeDir, fileNameNoExt + (jsFileExt === '.ts' ? '.js' : '.ts'));
+        if (fs.existsSync(alternatePath)) {
+            const previous = fs.readFileSync(alternatePath, 'utf-8');
+            if (previous.includes(`const __VIEW_PATH__ = '${viewPath}';`)) fs.unlinkSync(alternatePath);
+        }
         console.log(`  ✓ ${viewPath}`);
 
         const actualPath = path.relative(compiledViewsDir, jsPath);
@@ -452,7 +506,6 @@ class Compiler {
             declarations: [],
             blade: '',
             script: '',
-            style: '',
             ssrContent: '',  // Content from @ssr blocks (for blade file only)
             cleanedContent: '',  // Store content after @ssr removal for script extraction
             wrapperType: null // 'sao:blade', 'template', 'blade', or null (no wrapper)
@@ -738,12 +791,10 @@ class Compiler {
             parts.script = scriptMatch[1].trim();
         }
 
-        // Extract style (only from content WITHOUT wrappers)
-        const styleMatch = matchOutsideComments(/<style[^>]*>([\s\S]*?)<\/style>/i, content);
-        if (styleMatch) {
-            parts.style = styleMatch[1].trim();
-        }
-        
+        // `<style>` KHÔNG bóc ở đây: compiler PHP (SourceSplitter → BladeEmitter)
+        // mới là bên xử lý, nó đưa CSS vào `styles` của view kèm class scope.
+        // Chỗ này từng gán `parts.style` mà không ai đọc — tàn dư đường parse JS cũ.
+
         // Store cleaned content (after removing wrappers) for script setup extraction
         parts.cleanedContent = content;
 
@@ -1193,6 +1244,7 @@ class Compiler {
             const registryPath = ConfigManager.resolveCompiledPath(projectRoot, paths, compiledConfig.registry);
             pathsToClean.push({ path: registryPath, type: 'registry' });
         }
+
         
         // Clean each path
         for (const item of pathsToClean) {
@@ -1211,6 +1263,280 @@ class Compiler {
                 console.warn(`   ⚠️  Could not clean ${item.type}: ${error.message}`);
             }
         }
+    }
+
+    /**
+     * Xoá `.blade.php` không còn nguồn `.sao` nào sinh ra nó.
+     *
+     * Trước đây cây Blade KHÔNG bao giờ được dọn → xoá một `.sao` là để lại file
+     * mồ côi sống mãi, và nó vẫn render được.
+     *
+     * Nhưng cũng KHÔNG xoá sạch cây trước khi compile: làm vậy mở ra một khoảng
+     * thời gian view không tồn tại, request nào rơi vào đó thì 500 — đã đo được
+     * trên dev server. Quét sau khi ghi xong thì không có khoảng trống nào.
+     *
+     * Chỉ quét thư mục SUY RA TỪ `contexts.{ctx}.blade`; theme cài lúc chạy
+     * không có namespace trong config app nên không bao giờ bị đụng tới.
+     */
+    sweepOrphanBlade(contextConfig, projectRoot, paths) {
+        if (!this.writtenBlade || this.writtenBlade.size === 0) return;
+
+        let removed = 0;
+        const walk = (dir) => {
+            if (!fs.existsSync(dir)) return;
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    walk(full);
+                    try { if (fs.readdirSync(full).length === 0) fs.rmdirSync(full); } catch { /* bỏ qua */ }
+                } else if (entry.name.endsWith('.blade.php') && !this.writtenBlade.has(path.resolve(full))) {
+                    try { fs.unlinkSync(full); removed++; } catch { /* bỏ qua */ }
+                }
+            }
+        };
+
+        for (const bladeRelPath of Object.values(contextConfig.blade || {})) {
+            if (typeof bladeRelPath !== 'string' || bladeRelPath === '') continue;
+            walk(ConfigManager.resolveBladePath(projectRoot, paths, bladeRelPath));
+        }
+
+        if (removed > 0) console.log(`   ✓ Removed ${removed} orphan blade file(s)`);
+    }
+
+    /**
+     * Sinh entry `app.{ctx}.js`.
+     *
+     * Bốn việc, đúng thứ tự:
+     *   1. `export *` runtime  → import map của theme trỏ vào đây (§7)
+     *   2. `window.Saola`      → script thường dựng được view (§6.4d)
+     *   3. gộp bundle nguồn    → app/bootstrap.ts + contexts/{ctx}/app/bootstrap.ts
+     *   4. App.start()         → tự nạp APP_CONFIGS.bundles rồi rút hàng đợi App.push
+     *
+     * KHÔNG đặt `window.App` ở đây: `drainPushQueue()` trong client mới là chỗ
+     * thay mảng hàng đợi bằng App thật. Gán sớm là xoá mất hàng đợi.
+     */
+    async generateAppEntry(contextConfig, projectRoot, paths, contextName) {
+        const compiledConfig = contextConfig.compiled || {};
+        if (!compiledConfig.registry) return;
+
+        const compiledBase = ConfigManager.resolveCompiledPath(projectRoot, paths, '');
+        const entryPath = path.join(compiledBase, `app.${contextName}.js`);
+
+        const registryAbs = ConfigManager.resolveCompiledPath(projectRoot, paths, compiledConfig.registry);
+        const registryTs = registryAbs.replace(/\.(js|ts)$/, '.ts');
+        const registryFile = fs.existsSync(registryTs) ? registryTs : registryAbs.replace(/\.(js|ts)$/, '.js');
+        const registryImport = './' + path.relative(compiledBase, registryFile)
+            .replace(/\\/g, '/')
+            .replace(/\.(ts|js)$/, '.js');
+
+        // bootstrap.ts là TUỲ CHỌN — không có thì bỏ qua, không lỗi.
+        //
+        // Đường dẫn SUY TỪ CONFIG, không hardcode tên thư mục: `contexts.{ctx}.app`
+        // trỏ đâu thì bootstrap của context nằm đó. Hardcode một lần là mỗi lần
+        // đổi cấu trúc thư mục lại phải sửa builder.
+        const saoView = ConfigManager.resolveAppPath(projectRoot, paths, '');
+        const sharedDir = String(paths.sharedApp || '_app');
+        const ctxAppRel = (contextConfig.app || [])[0] || null;
+
+        const sharedBootstrap = path.join(saoView, sharedDir, 'bootstrap.ts');
+        const shared = fs.existsSync(sharedBootstrap);
+        const ctxBootstrapPath = ctxAppRel ? path.join(saoView, ctxAppRel, 'bootstrap.ts') : null;
+        const ctxBootstrap = ctxBootstrapPath ? fs.existsSync(ctxBootstrapPath) : false;
+
+        const imports = [
+            `import * as SaolaRuntime from '@saolabs/client';`,
+            `import { app, App, mergeBundles, bootBundles } from '@saolabs/client';`,
+            `import registry from '${registryImport}';`,
+        ];
+        const own = [];
+        if (shared) { imports.push(`import sharedBundle from '@sao/${sharedDir}/bootstrap';`); own.push('sharedBundle'); }
+        if (ctxBootstrap) { imports.push(`import contextBundle from '@sao/${ctxAppRel}/bootstrap';`); own.push('contextBundle'); }
+
+        const content = `/**
+ * ĐƯỢC SINH TỰ ĐỘNG bởi @saolabs/builder — đừng sửa file này.
+ * Sinh lúc: ${new Date().toISOString()}
+ *
+ * Muốn thêm provider / service / helper thì sửa:
+ *   ${paths.saoView}/${sharedDir}/bootstrap.ts     (mọi context)
+ *   ${paths.saoView}/${ctxAppRel}/bootstrap.ts     (riêng ${contextName})
+ */
+
+${imports.join('\n')}
+
+const container = app();
+
+// Namespace runtime cho script KHÔNG phải module (snippet Blade, plugin bên thứ
+// ba) — chúng cần class View để dựng view, mà App chỉ là container.
+if (typeof window !== 'undefined') window.Saola = SaolaRuntime;
+
+// Bundle nguồn của chính app, gộp theo thứ tự: chung trước, context sau.
+const own = mergeBundles([${own.join(', ')}]);
+
+// Top-level await sẽ đẩy build.target lên cao và làm hỏng vài đường phân tích
+// tĩnh của rollup — dùng async IIFE.
+(async () => {
+    await App.start({
+        view: {
+            container: '#app-root',
+            // Bundle nạp rời (theme) đè lên registry này, xử lý trong App.start.
+            registry: { ...registry, ...own.views },
+        },
+        services: own.services,
+        helpers: own.helpers,
+        providers: own.providers,
+    });
+    bootBundles(own, container);
+})();
+
+// Đích của import map: theme build độc lập \`import ... from '@saolabs/client'\`
+// resolve về CHÍNH FILE NÀY, nên hai bên dùng chung một instance runtime (§7).
+// Cần \`preserveEntrySignatures: 'exports-only'\` trong vite.config, nếu không
+// rollup tree-shake sạch khối export này.
+export * from '@saolabs/client';
+export { container as App, registry };
+`;
+
+        this.ensureDir(path.dirname(entryPath));
+        fs.writeFileSync(entryPath, content, 'utf8');
+        console.log(`   ✓ Generated entry: app.${contextName}.js`);
+    }
+
+    /**
+     * Entry của gói theme: MỘT file `main.js` = một `defineBundle`.
+     *
+     * Context tách hai file để thay view mà không đụng logic; theme thì CHÍNH NÓ
+     * đã là đơn vị thay thế nên tách nữa không mua được gì (§8.5.1).
+     *
+     * `@saolabs/client` để EXTERNAL lúc bundle: import map của trang trỏ nó về
+     * entry của app ⇒ dùng chung một instance runtime. Quên external là kéo theo
+     * bản runtime thứ hai và hydrate vỡ câm (§7.2b).
+     */
+    async generateThemeEntry(contextConfig, projectRoot, paths, contextName) {
+        const compiledConfig = contextConfig.compiled || {};
+        if (!compiledConfig.registry) return;
+
+        const compiledBase = ConfigManager.resolveCompiledPath(projectRoot, paths, '');
+        const entryPath = path.join(compiledBase, 'main.js');
+
+        const registryAbs = ConfigManager.resolveCompiledPath(projectRoot, paths, compiledConfig.registry);
+        const registryTs = registryAbs.replace(/\.(js|ts)$/, '.ts');
+        const registryFile = fs.existsSync(registryTs) ? registryTs : registryAbs.replace(/\.(js|ts)$/, '.js');
+        const registryImport = './' + path.relative(compiledBase, registryFile)
+            .replace(/\\/g, '/')
+            .replace(/\.(ts|js)$/, '.js');
+
+        const saoView = ConfigManager.resolveAppPath(projectRoot, paths, '');
+        const hasApp = fs.existsSync(path.join(saoView, 'app', 'bootstrap.ts'));
+
+        const imports = [
+            `import { defineBundle } from '@saolabs/client';`,
+            `import registry from '${registryImport}';`,
+        ];
+        if (hasApp) imports.push(`import themeApp from '@theme/app/bootstrap';`);
+
+        const slug = this.themeConfig.slug || contextName;
+        const content = `/**
+ * ĐƯỢC SINH TỰ ĐỘNG bởi @saolabs/builder — đừng sửa file này.
+ * Gói theme: ${slug}
+ * Sinh lúc: ${new Date().toISOString()}
+ */
+
+${imports.join('\n')}
+
+// View thì ĐÈ view cùng khoá của app; provider/service thì CỘNG THÊM.
+// Theme không được gỡ provider của app — đó là đường để một theme vô hiệu hoá
+// hạ tầng của chính ứng dụng.
+export default defineBundle({
+    name: 'theme:${slug}',
+    views: registry,
+${hasApp ? `    providers: themeApp?.providers ?? [],
+    services: themeApp?.services ?? {},
+    helpers: themeApp?.helpers ?? {},
+` : ''}});
+`;
+
+        this.ensureDir(path.dirname(entryPath));
+        fs.writeFileSync(entryPath, content, 'utf8');
+        console.log(`   ✓ Generated theme entry: main.js`);
+
+        this.writeThemeManifest(projectRoot, paths, contextConfig);
+    }
+
+    /**
+     * `theme.json` — manifest phát hành, BUILDER đóng dấu chứ tác giả không gõ.
+     *
+     * Số nào phải khớp với app thì công cụ ghi, người không bao giờ gõ: một
+     * `contract` gõ tay là một con số sai đang chờ tới lượt (§8.3.3).
+     */
+    writeThemeManifest(projectRoot, paths, contextConfig) {
+        const t = this.themeConfig || {};
+        const generatedAt = new Date().toISOString();
+        const manifest = {
+            slug: t.slug || null,
+            name: t.name || null,
+            version: t.version || '0.0.0',
+            context: t.context || 'web',
+            contract: Compiler.OUTPUT_CONTRACT,
+            idMode: this.compilerOptions?.idMode || 'terse',
+            builder: this.readPackageVersion(path.join(__dirname, '..')),
+            runtime: this.readPackageVersion(path.join(projectRoot, 'node_modules', '@saolabs', 'client')),
+            revision: this.createBuildRevision({ theme: t, generatedAt }),
+            generatedAt,
+        };
+
+        const distBase = path.resolve(projectRoot, t.dist || 'dist');
+        try {
+            this.ensureDir(distBase);
+            fs.writeFileSync(path.join(distBase, 'theme.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+            console.log(`   ✓ Generated theme.json (contract ${manifest.contract}, idMode ${manifest.idMode}, rev ${manifest.revision})`);
+        } catch (e) {
+            console.warn(`   ⚠️  Không ghi được theme.json: ${e.message}`);
+        }
+    }
+
+    /**
+     * `public/static/saola/saola.json` — bản đối xứng của `theme.json`.
+     *
+     * Theme cài vào phải khớp `contract` và `idMode` với app, nếu không marker id
+     * lệch và hydrate nhân đôi DOM mà KHÔNG có lỗi nào. Xem §8.3.
+     */
+    writeBuildManifest(projectRoot, paths) {
+        const generatedAt = new Date().toISOString();
+        const builder = this.readPackageVersion(path.join(__dirname, '..'));
+        const runtime = this.readPackageVersion(path.join(projectRoot, 'node_modules', '@saolabs', 'client'));
+        const manifest = {
+            contract: Compiler.OUTPUT_CONTRACT,
+            idMode: this.compilerOptions?.idMode || 'terse',
+            builder,
+            runtime,
+            revision: this.createBuildRevision({ builder, runtime, generatedAt }),
+            generatedAt,
+        };
+
+        const publicBase = path.resolve(projectRoot, paths.public || 'public/static/saola');
+        try {
+            this.ensureDir(publicBase);
+            fs.writeFileSync(path.join(publicBase, 'saola.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+            console.log(`   ✓ Generated build manifest: saola.json (contract ${manifest.contract}, idMode ${manifest.idMode})`);
+        } catch (e) {
+            console.warn(`   ⚠️  Không ghi được saola.json: ${e.message}`);
+        }
+    }
+
+    readPackageVersion(pkgDir) {
+        try {
+            return JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8')).version || null;
+        } catch {
+            return null;
+        }
+    }
+
+    createBuildRevision(seed) {
+        return crypto.createHash('sha256')
+            .update(JSON.stringify(seed))
+            .update(crypto.randomBytes(16))
+            .digest('hex')
+            .slice(0, 16);
     }
 
     /**

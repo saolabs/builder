@@ -127,23 +127,20 @@ class ExpressionTransformer {
     transformTemplate(template) {
         let result = template;
 
-        // 0. Protect blade comments {{-- --}} (must NOT be transformed)
-        const bladeComments = [];
-        result = result.replace(/\{\{--[\s\S]*?--\}\}/g, (match) => {
-            const placeholder = `__BLADE_COMMENT_${bladeComments.length}__`;
-            bladeComments.push(match);
-            return placeholder;
-        });
-
-        // 0b. Protect @verbatim ... @endverbatim — nghĩa của verbatim là "giữ NGUYÊN
-        // văn". Không chặn ở đây thì `{{ title }}` trong khối code minh hoạ bị thêm
-        // `$` (thành `{{ $title }}`), còn `{{ $title }}` viết sẵn thành `{{ $$title }}`
-        // — sai nội dung ở CẢ Blade lẫn JS. Python đã tôn trọng @verbatim, chỉ tầng
-        // preprocessor Node là chưa.
-        const verbatimBlocks = [];
-        result = result.replace(/@verbatim[\s\S]*?@endverbatim/g, (match) => {
-            const placeholder = `__VERBATIM_RAW_${verbatimBlocks.length}__`;
-            verbatimBlocks.push(match);
+        // 0. Che `{{-- … --}}` và `@verbatim … @endverbatim` trong MỘT lượt quét.
+        //
+        // Hai lượt riêng thì khối nào che sau sẽ nuốt placeholder của khối che
+        // trước khi hai thứ lồng nhau, và vòng khôi phục quét `result` không còn
+        // gì để thay — placeholder rò thẳng ra trang. Xảy ra ở cả hai chiều:
+        // comment TRONG verbatim và verbatim TRONG comment.
+        //
+        // Quét xen kẽ trái-sang-phải thì khối NGOÀI luôn khớp trước và nuốt trọn
+        // khối trong. Nội dung giữ nguyên văn nên `{{ title }}` trong khối code
+        // minh hoạ không bị thêm `$`.
+        const masked = [];
+        result = result.replace(/\{\{--[\s\S]*?--\}\}|@verbatim\b[\s\S]*?@endverbatim\b/gi, (match) => {
+            const placeholder = `__SAO_MASKED_${masked.length}__`;
+            masked.push(match);
             return placeholder;
         });
 
@@ -165,14 +162,11 @@ class ExpressionTransformer {
         // 4. Transform bound HTML attributes (:attr="expr", @event="expr")
         result = this._transformAttributeBindings(result);
 
-        // 5. Restore blade comments + verbatim.
-        // Replacement phải là HÀM: dạng chuỗi bị String.replace diễn giải `$$`/`$&`
-        // trong nội dung, đúng thứ hay gặp trong khối code minh hoạ.
-        for (let i = 0; i < bladeComments.length; i++) {
-            result = result.replace(`__BLADE_COMMENT_${i}__`, () => bladeComments[i]);
-        }
-        for (let i = 0; i < verbatimBlocks.length; i++) {
-            result = result.replace(`__VERBATIM_RAW_${i}__`, () => verbatimBlocks[i]);
+        // 5. Khôi phục. Replacement phải là HÀM: dạng chuỗi bị String.replace
+        // diễn giải `$$`/`$&` trong nội dung, đúng thứ hay gặp trong khối code
+        // minh hoạ. Placeholder duy nhất và không lồng nhau nên thứ tự nào cũng đúng.
+        for (let i = 0; i < masked.length; i++) {
+            result = result.replace(`__SAO_MASKED_${i}__`, () => masked[i]);
         }
 
         return result;

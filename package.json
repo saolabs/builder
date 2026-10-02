@@ -14,7 +14,9 @@
     ],
     "type": "commonjs",
     "scripts": {
-        "test": "node src/test.js",
+        "check": "npm ci --dry-run --ignore-scripts && npm audit && npm test && npm run check:pack",
+        "test": "node src/test.js && node tests/test_typed_output.js && node tests/test_manifest_contract.js",
+        "check:pack": "npm pack --dry-run --ignore-scripts",
         "publish-dry-run": "npm publish --dry-run",
         "prepublishOnly": "npm test && echo 'Ready to publish @saolabs/builder'"
     },
@@ -29,13 +31,16 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/saolabs/saola-builder.git"
+        "url": "git+https://github.com/saolabs/builder.git"
     },
     "author": "Sao Labs <saolaxoder@gmail.com>",
     "bugs": {
-        "url": "https://github.com/saolabs/saola-builder/issues"
+        "url": "https://github.com/saolabs/builder/issues"
     },
-    "homepage": "https://github.com/saolabs/saola-builder#readme",
+    "homepage": "https://github.com/saolabs/builder#readme",
+    "publishConfig": {
+        "access": "public"
+    },
     "bin": {
         "sao-compile": "src/cli.js",
         "sao-build": "src/build-cli.js",
