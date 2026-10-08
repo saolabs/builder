@@ -1,0 +1,2 @@
+@states({ count: 0 })
+<template><main><p class="eyebrow">MOBILE CONTEXT · HASH ROUTER</p><h1>A separate app.</h1><p>This context has its own HTML, registry, routes and bundle.</p><div class="actions"><button @click(setCount(count + 1))>Counter: {{ count }}</button><a href="/about">Open another route →</a></div></main></template>

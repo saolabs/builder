@@ -1377,7 +1377,7 @@ const own = mergeBundles([${own.join(', ')}]);
 (async () => {
     await App.start({
         view: {
-            container: '#app-root',
+            container: (typeof window !== 'undefined' && window.APP_CONFIGS?.container) || '#app-root',
             // Bundle nạp rời (theme) đè lên registry này, xử lý trong App.start.
             registry: { ...registry, ...own.views },
         },

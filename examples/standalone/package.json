@@ -1,0 +1,8 @@
+{
+  "name": "saola-standalone-example",
+  "private": true,
+  "type": "module",
+  "scripts": { "dist": "sao-dist", "dist:web": "sao-dist web", "dist:mobile": "sao-dist mobile", "dist:all": "sao-dist all" },
+  "dependencies": { "@saolabs/client": "^1.0.0" },
+  "devDependencies": { "@saolabs/builder": "^1.0.1", "vite": "^6.4.0" }
+}

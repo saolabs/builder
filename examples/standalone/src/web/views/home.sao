@@ -1,0 +1,4 @@
+@states({ count: 0 })
+<template>
+<main><p class="eyebrow">SAOLA · STANDALONE SPA</p><h1>One context.<br>One deployable app.</h1><p>Rendered entirely in the browser from an index.html and a compiled Saola bundle.</p><div class="actions"><button @click(setCount(count + 1))>Counter: {{ count }}</button><a href="/about">Open another route →</a></div><p class="note">No Laravel server is serving this page. State and navigation run in the client.</p></main>
+</template>

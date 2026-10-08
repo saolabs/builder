@@ -1,0 +1,1 @@
+<template><main><p class="eyebrow">WEB CONTEXT</p><h1>A second route.</h1><p>Direct links and refresh work when the static server falls back to index.html.</p><a href="/">← Back to the counter</a></main></template>

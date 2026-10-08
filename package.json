@@ -7,15 +7,21 @@
         ".": "./src/index.js",
         "./vite": "./src/vite-plugin.js",
         "./webpack": "./src/webpack-plugin.js",
-        "./package.json": "./package.json"
+        "./package.json": "./package.json",
+        "./dist": {
+            "types": "./src/dist.d.ts",
+            "default": "./src/dist.js"
+        }
     },
     "files": [
-        "src/"
+        "src/",
+        "docs/STANDALONE_DIST.md",
+        "examples/standalone/"
     ],
     "type": "commonjs",
     "scripts": {
         "check": "npm ci --dry-run --ignore-scripts && npm audit && npm test && npm run check:pack",
-        "test": "node src/test.js && node tests/test_typed_output.js && node tests/test_manifest_contract.js",
+        "test": "node src/test.js && node tests/test_typed_output.js && node tests/test_manifest_contract.js && node --test tests/dist.test.js",
         "check:pack": "npm pack --dry-run --ignore-scripts",
         "publish-dry-run": "npm publish --dry-run",
         "prepublishOnly": "npm test && echo 'Ready to publish @saolabs/builder'"
@@ -44,13 +50,16 @@
     "bin": {
         "sao-compile": "src/cli.js",
         "sao-build": "src/build-cli.js",
-        "sao-dev": "src/dev-cli.js"
+        "sao-dev": "src/dev-cli.js",
+        "sao-dist": "src/dist-cli.js"
     },
     "directories": {
         "doc": "docs",
         "example": "examples"
     },
     "dependencies": {
-        "chokidar": "^3.6.0"
+        "chokidar": "^3.6.0",
+        "dotenv": "^16.6.1",
+        "dotenv-expand": "^12.0.3"
     }
 }
