@@ -1141,7 +1141,7 @@ class Compiler {
             console.log(`\n👀 Watching for changes in ${saoFilesDir}...`);
 
             const watcher = chokidar.watch(saoFilesDir, {
-                ignored: ['node_modules', '.git', '.*'],
+                ignored: /(^|[\\/])(node_modules|\.[^\\/]+)([\\/]|$)/,
                 persistent: true,
                 awaitWriteFinish: {
                     stabilityThreshold: 100,

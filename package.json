@@ -1,6 +1,6 @@
 {
     "name": "@saolabs/builder",
-    "version": "1.0.1",
+    "version": "1.0.0",
     "description": "Saola Builder - builds .sao applications with the saola/compiler Composer package",
     "main": "src/index.js",
     "exports": {
@@ -21,7 +21,7 @@
     "type": "commonjs",
     "scripts": {
         "check": "npm ci --dry-run --ignore-scripts && npm audit && npm test && npm run check:pack",
-        "test": "node src/test.js && node tests/test_typed_output.js && node tests/test_manifest_contract.js && node --test tests/dist.test.js",
+        "test": "node src/test.js && node tests/test_typed_output.js && node tests/test_manifest_contract.js && node --test tests/dist.test.js tests/watcher.test.js",
         "check:pack": "npm pack --dry-run --ignore-scripts",
         "publish-dry-run": "npm publish --dry-run",
         "prepublishOnly": "npm test && echo 'Ready to publish @saolabs/builder'"
@@ -58,7 +58,7 @@
         "example": "examples"
     },
     "dependencies": {
-        "chokidar": "^3.6.0",
+        "chokidar": "^4.0.3",
         "dotenv": "^16.6.1",
         "dotenv-expand": "^12.0.3"
     }
