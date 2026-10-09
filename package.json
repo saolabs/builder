@@ -1,6 +1,6 @@
 {
     "name": "@saolabs/builder",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "description": "Saola Builder - builds .sao applications with the saola/compiler Composer package",
     "main": "src/index.js",
     "exports": {
