@@ -831,13 +831,39 @@ class Compiler {
         return null;
     }
 
+    /**
+     * Thư mục project cho `saoc --directives` (saoc tự dò `sao.directives.php`
+     * của app và `extra.saola.directives` của package), hoặc null khi project
+     * không khai báo gì — để compiler cũ không biết cờ này vẫn build được.
+     */
+    resolveDirectivesRoot() {
+        const root = this.projectRoot || process.cwd();
+        if (this.directivesRootFor === root) return this.directivesRoot;
+        let declared = fs.existsSync(path.join(root, 'sao.directives.php'));
+        const installed = path.join(root, 'vendor/composer/installed.json');
+        if (!declared && fs.existsSync(installed)) {
+            try {
+                const data = JSON.parse(fs.readFileSync(installed, 'utf8'));
+                declared = (data.packages || data).some(pkg => pkg.extra?.saola?.directives);
+            } catch (error) {
+                declared = false;
+            }
+        }
+        this.directivesRootFor = root;
+        this.directivesRoot = declared ? root : null;
+        return this.directivesRoot;
+    }
+
     /** Gửi source qua stdin, nhận cả Blade và JS từ một tiến trình PHP. */
     compileWithPhp(source, options) {
+        const directives = options.sandbox ? null : this.resolveDirectivesRoot();
         if (this.phpWorker) {
             return new Promise((resolve, reject) => {
                 const id = ++this.phpWorkerRequestId;
                 this.phpWorkerPending.set(id, { resolve, reject });
-                this.phpWorker.stdin.write(JSON.stringify({ id, cmd: 'compile', source, options }) + '\n');
+                const request = { id, cmd: 'compile', source, options };
+                if (directives) request.directives = directives;
+                this.phpWorker.stdin.write(JSON.stringify(request) + '\n');
             });
         }
         return new Promise((resolve, reject) => {
@@ -860,6 +886,7 @@ class Compiler {
                 }
             }
             if (options.sandbox) args.push('--sandbox');
+            if (directives) args.push(`--directives=${directives}`);
 
             const child = spawn(process.env.SAOLA_PHP_BINARY || 'php', args, {
                 stdio: ['pipe', 'pipe', 'pipe'],

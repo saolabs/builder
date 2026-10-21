@@ -21,7 +21,7 @@
     "type": "commonjs",
     "scripts": {
         "check": "npm ci --dry-run --ignore-scripts && npm audit && npm test && npm run check:pack",
-        "test": "node src/test.js && node tests/test_typed_output.js && node tests/test_manifest_contract.js && node --test tests/dist.test.js tests/watcher.test.js",
+        "test": "node src/test.js && node tests/test_typed_output.js && node tests/test_manifest_contract.js && node --test tests/dist.test.js tests/watcher.test.js tests/directives.test.js",
         "check:pack": "npm pack --dry-run --ignore-scripts",
         "publish-dry-run": "npm publish --dry-run",
         "prepublishOnly": "npm test && echo 'Ready to publish @saolabs/builder'"
