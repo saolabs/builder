@@ -1,5 +1,7 @@
 # @saolabs/builder
 
+Coordinated admin alpha compatibility: see [release notes](RELEASE.md).
+
 Lớp build-time của hệ sinh thái Saola. Package này đọc `sao.config.json`, tìm
 view `.sao`, gọi compiler PHP `saola/compiler`, ghi đồng thời Blade +
 JavaScript/TypeScript, sinh registry và tích hợp với Vite/Webpack.

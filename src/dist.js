@@ -87,7 +87,11 @@ async function resolveRuntimeConfig(config, projectRoot, exporter = exportRuntim
         if (cfg.locales !== undefined) {
             if (!Array.isArray(cfg.locales) || cfg.locales.some(code => typeof code !== 'string')) throw new Error(`${name}: locales must be a string array`);
             const codes = new Set([...cfg.locales, cfg.i18n?.locale, cfg.i18n?.fallbackLocale].filter(Boolean));
-            cfg.i18n = { ...cfg.i18n, messages: Object.fromEntries(Object.entries(cfg.i18n?.messages || {}).filter(([code]) => codes.has(code))) };
+            cfg.i18n = {
+                ...cfg.i18n,
+                messages: Object.fromEntries(Object.entries(cfg.i18n?.messages || {}).filter(([code]) => codes.has(code))),
+                ...(cfg.i18n?.catalogs ? { catalogs: Object.fromEntries(Object.entries(cfg.i18n.catalogs).filter(([code]) => codes.has(code))) } : {}),
+            };
         }
         cfg.base = cfg.baseUrl ?? cfg.base ?? '/';
         if (cfg.apiUrl !== undefined) {

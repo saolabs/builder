@@ -61,6 +61,10 @@ Mọi cấu hình đóng gói đều có thể đọc từ trình duyệt.
 
 ## Ngôn ngữ
 
+Quy ước Saola mới: [Language System](../../docs/LANGUAGE_SYSTEM.md). Nguồn project/package là `lang/{locale}/*.php` đăng ký với registry rồi sync DB; compiler mới chuyển `__()` trong `.sao` sang `text()`. Runtime nhận `i18n.scope` và `i18n.catalogs[locale] = { scope, revision, messages: tree }`, không thêm file/package vào key. Dist chấp nhận snapshots qua cấu hình hoặc runtime exporter tùy chỉnh; `locales` lọc cả catalogs và legacy messages, giữ default/fallback. Host dùng projection `ClientCatalogs` được phép export; builder không tự dump toàn bộ DB catalog private.
+
+Các mô tả đọc file tự động dưới đây thuộc **đường Laravel legacy** (`trans`/`choice`), không thay thế DB store hoặc làm source PHP thành fallback của `text()`. Static/offline dùng snapshot tại thời điểm build; cập nhật DB không tự sửa bản dist đã xuất. Locale mới ở phiên online cần `loadLanguage` và endpoint của host, hoặc xuất lại snapshot cho chế độ offline.
+
 Build tự đọc các nguồn dịch Laravel (`lang/`, `resources/lang/` và các đường dẫn
 translation đã đăng ký), gồm PHP groups, JSON câu dịch và package namespaces.
 Locale mặc định/fallback lấy từ `config/app.php`. Không phải cấu hình lại locale.
@@ -77,8 +81,8 @@ Locale mặc định và fallback luôn được giữ lại. Không đặt trư
 View dùng các helper thông thường:
 
 ```blade
-<p>{{ __('messages.welcome', ['name' => 'Lan']) }}</p>
-<p>@lang('messages.title')</p>
+<p>{{ trans('messages.welcome', ['name' => 'Lan']) }}</p>
+<p>{{ trans('messages.title') }}</p>
 <p>@choice('messages.apples', 2)</p>
 ```
 
