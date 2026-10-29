@@ -60,6 +60,17 @@ test('custom vendor directory and Composer v1 inventory are supported', t => {
     assert.equal(f.load().contexts.admin._contextPackage.package, 'acme/panel');
 });
 
+test('legacy published theme descriptors are skipped unless package mode is explicit', t => {
+    const f = fixture(t);
+    f.put('resources/saola/admin/.publish-state.json', {});
+    f.put(f.source + 'themes/classic/theme.manifest.json', {
+        name: 'classic', contract: 1, view_context: 'admin.themes.classic', views: 'views',
+    });
+    assert.equal(f.load().contexts.admin._contextPackage, undefined);
+    f.put('sao.config.json', {contexts: {admin: {mode: 'package'}}});
+    assert.throws(f.load, /Invalid theme manifest/);
+});
+
 test('installing a context does not skip normalization of existing legacy contexts', t => {
     const f = fixture(t);
     f.put('sao.config.json', {root: 'resources/saola', contexts: {web: {

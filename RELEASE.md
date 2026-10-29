@@ -1,3 +1,9 @@
+# Saola Builder v1.3.1
+
+Preserves existing managed source publications before validating the newer package theme contract. Fixes builds of projects using legacy published admin themes; explicit package mode still validates descriptors strictly.
+
+Validated with the builder suite and the Gehihi consumer build.
+
 # Saola Builder v1.3.0
 
 Adds conventional plain/theme/package context modes and distributable context manifests. Rebuilds are serialized, environment changes reload configuration, dotted namespaces resolve consistently, and theme installation keeps generated views safe. Includes context integration and watcher regression coverage.

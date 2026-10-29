@@ -60,7 +60,14 @@ function discover(projectRoot, accept = () => true) {
 
 function configure(config, projectRoot) {
     const env = Modes.environment(projectRoot);
-    const packages = discover(projectRoot, name => ['auto', 'package'].includes(Modes.mode(name, config.contexts?.[name], env)));
+    const packages = discover(projectRoot, name => {
+        const mode = Modes.mode(name, config.contexts?.[name], env);
+        if (!['auto', 'package'].includes(mode)) return false;
+        // Published integrations may use the older theme namespace contract.
+        // Do not inspect package descriptors until the project opts into package mode.
+        const published = path.resolve(projectRoot, config.paths?.saoView || 'resources/saola', name, '.publish-state.json');
+        return mode === 'package' || !fs.existsSync(published);
+    });
     if (packages.length) Modes.defaults(config);
     for (const pkg of packages) {
         const name = pkg.context;
