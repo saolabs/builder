@@ -1,3 +1,9 @@
+# Saola Builder v1.3.0
+
+Adds conventional plain/theme/package context modes and distributable context manifests. Rebuilds are serialized, environment changes reload configuration, dotted namespaces resolve consistently, and theme installation keeps generated views safe. Includes context integration and watcher regression coverage.
+
+Validated with the compiler, manifest, distribution and 50 Node tests (polling watcher on macOS). Distributed through the GitHub tag and package archive, matching existing consumer dependency URLs.
+
 # Saola Builder v1.0.2
 
 Build tools and Vite/Webpack integrations for .sao applications, including context-scoped SPA/static distributions. File watching now uses Chokidar 4 and path filters without glob dependencies.

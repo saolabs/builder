@@ -5,6 +5,24 @@ const os = require('node:os');
 const path = require('node:path');
 const { validateContext, makeHtml, loadDistConfig, resolveRuntimeConfig, exportRuntimeConfig, buildContext } = require('../src/dist');
 
+test('locale selection retains Saola DB snapshots and filters them with legacy dictionaries', async t => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sao-dist-catalog-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const cfg = { contexts: { web: {
+        locales: ['ja'], router: { routes: [{ path: '/', component: 'web.home' }] },
+        i18n: { locale: 'en', fallbackLocale: 'vi', catalogs: {
+            en: { revision: 1, messages: { save: 'Save' } },
+            vi: { revision: 2, messages: { save: 'Lưu' } },
+            ja: { revision: 3, messages: { auth: { keep_login: '保持' } } },
+            fr: { revision: 1, messages: { save: 'Sauver' } },
+        } },
+    } } };
+    await resolveRuntimeConfig(cfg, root);
+    assert.deepEqual(Object.keys(cfg.contexts.web.i18n.catalogs), ['en', 'vi', 'ja']);
+    assert.equal(cfg.contexts.web.i18n.catalogs.ja.messages.auth.keep_login, '保持');
+    assert.equal(cfg.contexts.web.i18n.catalogs.vi.revision, 2);
+});
+
 function fixture(t) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sao-dist-test-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));

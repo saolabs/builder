@@ -25,22 +25,35 @@ class ConfigManager {
                     try {
                         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
                         // Normalize old format to new format before returning
-                        const normalizedConfig = ConfigManager.normalizeConfig(config);
+                        const legacy = config.root !== undefined || Object.values(config.contexts || {}).some(ctx => ctx.temp);
+                        const sourceConfig = legacy ? ConfigManager.normalizeConfig(config) : config;
+                        const withPackages = require('./context-packages').configure(sourceConfig, currentPath);
+                        const normalizedConfig = ConfigManager.normalizeConfig(withPackages);
                         return {
                             config: normalizedConfig,
                             configPath,
                             projectRoot: currentPath
                         };
                     } catch (e) {
-                        throw new Error(`Invalid JSON in ${configPath}: ${e.message}`);
+                        throw new Error(`Could not load ${configPath}: ${e.message}`);
                     }
+                }
+            }
+
+            // A conventional project can start with just .env and {context}/
+            // app/assets/views; a large sao.config.json is optional.
+            const conventional = path.join(currentPath, 'resources/saola');
+            if (fs.existsSync(conventional)) {
+                const configured = require('./context-packages').configure({}, currentPath);
+                if (Object.keys(configured.contexts || {}).length) {
+                    return {config: configured, configPath: null, projectRoot: currentPath};
                 }
             }
 
             currentPath = path.dirname(currentPath);
         }
 
-        throw new Error('sao.config.json or sao.config.json not found. Please create it at your project root.');
+        throw new Error('No sao.config.json or conventional resources/saola/{context}/views (or themes) found at the project root.');
     }
 
     /**

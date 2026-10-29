@@ -33,7 +33,7 @@ class RegistryGenerator {
         // Lazy tắt mặc định → giữ nguyên hành vi eager của mọi app hiện có.
         const lazyEnabled = options.lazy === true;
         const eagerSet = lazyEnabled
-            ? this._resolveEagerSet(viewEntries, viewsDir, options.eager || [])
+            ? this._resolveEagerSet(viewEntries, viewsDir, options.eager || [], options.readFile)
             : null;
 
         viewEntries.forEach(entry => {
@@ -102,7 +102,8 @@ export default ViewRegistry;
             fs.mkdirSync(dir, { recursive: true });
         }
 
-        fs.writeFileSync(outputPath, content, 'utf8');
+        if (options.writeFile) options.writeFile(outputPath, content);
+        else fs.writeFileSync(outputPath, content, 'utf8');
         console.log(`   ✓ Generated registry: ${path.basename(outputPath)}`);
     }
 
@@ -116,7 +117,7 @@ export default ViewRegistry;
      *
      * @returns {Set<string>} dot-path của các view phải eager
      */
-    static _resolveEagerSet(viewEntries, viewsDir, userEager) {
+    static _resolveEagerSet(viewEntries, viewsDir, userEager, readFile = file => fs.readFileSync(file, 'utf8')) {
         const dotPaths = viewEntries.map(e => this._toDotPath(typeof e === 'string' ? e : e.namingPath));
         const eager = new Set();
 
@@ -140,7 +141,7 @@ export default ViewRegistry;
             const actualPath = typeof entry === 'string' ? entry : entry.actualPath;
             let code;
             try {
-                code = fs.readFileSync(path.join(viewsDir, actualPath), 'utf8');
+                code = readFile(path.join(viewsDir, actualPath));
             } catch {
                 return; // chưa compile / đã bị xoá → bỏ qua, không chặn build
             }

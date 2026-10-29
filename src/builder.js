@@ -128,6 +128,9 @@ class Builder {
      * Bundle app.ts with esbuild
      */
     async bundle(config, projectRoot, contextName, options = {}) {
+        if (require('./context-packages').source(config.contexts[contextName])) {
+            throw new Error('Managed context sources require the @saolabs/builder/vite pipeline (theme chunks, CSS manifest and asset inventory). Use sao-compile followed by vite build.');
+        }
         const esbuild = await this.loadEsbuild();
         const paths = config.paths || {};
         const contextConfig = config.contexts[contextName];

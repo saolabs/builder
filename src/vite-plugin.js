@@ -20,6 +20,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const ContextPackages = require('./context-packages');
 
 function saolaPlugin(options = {}) {
     const {
@@ -33,6 +34,14 @@ function saolaPlugin(options = {}) {
     let projectRoot = null;
     let config = null;
     let isDevMode = false;
+    let sourceWatcher = null;
+    let rebuildQueue = null;
+    const closeWatch = async () => {
+        await Promise.all([sourceWatcher?.close(), rebuildQueue?.close()]);
+        sourceWatcher = null;
+        rebuildQueue = null;
+        await compiler?.closeWatchers();
+    };
 
     // Lazy load compiler
     const getCompiler = () => {
@@ -53,19 +62,54 @@ function saolaPlugin(options = {}) {
         return result;
     };
 
+    const syncDevAssets = () => {
+        const names = context === 'all' ? Object.keys(config.contexts) : [context];
+        for (const name of names) {
+            const pkg = ContextPackages.source(config.contexts[name]);
+            if (!pkg) continue;
+            const publicRoot = path.resolve(projectRoot, config.paths.public || 'public/static/saola');
+            const content = new Map();
+            for (const [relative, source] of ContextPackages.files(pkg.effectiveRoot)) {
+                const fileName = ContextPackages.slash(relative);
+                if (fileName.startsWith('assets/') || /^themes\/[^/]+\/assets\//.test(fileName)) content.set(path.join(publicRoot, name, relative), fs.readFileSync(source));
+            }
+            ContextPackages.writeOwned(path.join(publicRoot, `.context-assets-${name}.json`), [path.join(publicRoot, name, 'assets'), path.join(publicRoot, name, 'themes')], content, projectRoot);
+        }
+    };
+
     return {
         name: 'vite-plugin-saola',
         
         // Run before Vite resolves config
         config(viteConfig, { command }) {
             isDevMode = command === 'serve';
+            loadConfig(path.resolve(viteConfig.root || process.cwd()));
+            const aliases = ContextPackages.aliases(config);
+            if (!aliases.length) return;
+            if (context === 'all') throw new Error('Build package contexts separately with Vite; use sao-compile all for compilation.');
+            const names = context === 'all' ? Object.keys(config.contexts) : [context];
+            const css = [...new Set(names.flatMap(name => Object.values(ContextPackages.source(config.contexts[name])?.css || {})).map(file => path.resolve(projectRoot, file)))];
+            const input = viteConfig.build?.rollupOptions?.input;
+            const inputs = input && !Array.isArray(input) && typeof input === 'object'
+                ? {...input, ...Object.fromEntries(css.map((file, index) => [`saola-css-${index}`, file]))}
+                : [...new Set([...(Array.isArray(input) ? input : input ? [input] : [path.resolve(projectRoot, config.paths.compiled, `app.${context}.js`)]), ...css])];
+            const publicRoot = path.resolve(projectRoot, config.paths.public || 'public/static/saola');
+            const outDir = path.resolve(projectRoot, viteConfig.build?.outDir || path.join(publicRoot, context));
+            const installedThemes = path.join(publicRoot, 'themes');
+            if (installedThemes === outDir || installedThemes.startsWith(outDir + path.sep)) throw new Error('Vite outDir must not contain installed themes; build into a context directory.');
+            return {
+                base: viteConfig.base ?? `/${path.relative(path.resolve(projectRoot, 'public'), path.join(publicRoot, context)).split(path.sep).join('/')}/`,
+                publicDir: viteConfig.publicDir ?? false,
+                resolve: {alias: aliases},
+                build: {outDir, manifest: viteConfig.build?.manifest ?? 'manifest.json', rollupOptions: {input: inputs, preserveEntrySignatures: viteConfig.build?.rollupOptions?.preserveEntrySignatures ?? 'exports-only'}},
+            };
         },
 
         // Run when Vite server starts or build begins
         async buildStart() {
             try {
                 // Load config from project root
-                const root = process.cwd();
+                const root = projectRoot || process.cwd();
                 loadConfig(root);
 
                 console.log('\n🔨 Saola: Compiling views...');
@@ -77,6 +121,7 @@ function saolaPlugin(options = {}) {
                 } else {
                     await comp.buildContext(config, projectRoot, context);
                 }
+                if (isDevMode) syncDevAssets();
 
                 console.log('✅ Saola: Views compiled\n');
             } catch (error) {
@@ -102,59 +147,35 @@ function saolaPlugin(options = {}) {
             const chokidar = require('chokidar');
 
             // Get directories to watch
-            const watchDirs = [];
             const contexts = context === 'all'
                 ? Object.keys(config.contexts).filter(c => c !== 'default')
                 : [context];
 
-            const saolaViewPath = path.join(projectRoot, config.paths.saoView || config.paths.saolaView || 'resources/sao');
-
-            for (const ctx of contexts) {
-                const ctxConfig = config.contexts[ctx];
-                if (ctxConfig?.views) {
-                    for (const [namespace, viewPath] of Object.entries(ctxConfig.views)) {
-                        const fullPath = path.join(saolaViewPath, viewPath);
-                        if (fs.existsSync(fullPath)) {
-                            watchDirs.push(fullPath);
-                        }
-                    }
-                }
-                // Also watch app sources (helpers/services) — same saoView base as
-                // views. copyAppFiles resolves these via paths.saoView too, so
-                // editing them must trigger a recompile just like a view change.
-                if (Array.isArray(ctxConfig?.app)) {
-                    for (const appPath of ctxConfig.app) {
-                        const fullPath = path.join(saolaViewPath, appPath);
-                        if (fs.existsSync(fullPath)) {
-                            watchDirs.push(fullPath);
-                        }
-                    }
-                }
-            }
+            const watchDirs = ContextPackages.watchRoots(config, projectRoot, contexts);
 
             if (watchDirs.length === 0) return;
 
             console.log('👀 Saola: Watching for .sao file changes...');
 
-            const watcher = chokidar.watch(watchDirs, {
+            const watcher = sourceWatcher = chokidar.watch(watchDirs.filter(file => fs.existsSync(file)), {
                 ignored: /node_modules/,
                 persistent: true,
                 ignoreInitial: true,
             });
 
-            let debounceTimer = null;
-
-            const recompile = async (changedPath) => {
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(async () => {
+            watcher.once('ready', () => watcher.add(watchDirs.filter(file => !fs.existsSync(file))));
+            rebuildQueue = require('./rebuild-queue')(async changedPath => {
                     console.log(`\n🔄 Saola: ${path.basename(changedPath)} changed, recompiling...`);
                     try {
+                        loadConfig(projectRoot);
+                        watcher.add(ContextPackages.watchRoots(config, projectRoot, contexts));
                         const comp = getCompiler();
                         if (context === 'all') {
                             await comp.buildAllContexts(config, projectRoot);
                         } else {
                             await comp.buildContext(config, projectRoot, context);
                         }
+                        syncDevAssets();
                         console.log('✅ Saola: Recompiled\n');
                         
                         // Trigger Vite HMR
@@ -162,17 +183,31 @@ function saolaPlugin(options = {}) {
                     } catch (error) {
                         console.error('❌ Saola recompile error:', error.message);
                     }
-                }, 300);
-            };
+            });
+            const recompile = changedPath => rebuildQueue?.schedule(changedPath);
 
             watcher.on('change', recompile);
             watcher.on('add', recompile);
             watcher.on('unlink', recompile);
 
             // Clean up on server close
-            server.httpServer?.on('close', () => {
-                watcher.close();
-            });
+            server.httpServer?.on('close', closeWatch);
+        },
+
+        closeBundle: closeWatch,
+
+        generateBundle() {
+            const names = context === 'all' ? Object.keys(config.contexts) : [context];
+            for (const name of names) {
+                const pkg = ContextPackages.source(config.contexts[name]);
+                if (!pkg) continue;
+                for (const [relative, source] of ContextPackages.files(pkg.effectiveRoot)) {
+                    const fileName = ContextPackages.slash(relative);
+                    if (fileName.startsWith('assets/') || /^themes\/[^/]+\/assets\//.test(fileName)) {
+                        this.emitFile({type: 'asset', fileName, source: fs.readFileSync(source)});
+                    }
+                }
+            }
         },
 
         // Transform to minify HTML in templates

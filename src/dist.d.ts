@@ -10,7 +10,7 @@ export interface DistContext {
     enabled?: boolean;
     locales?: string[];
     includeViews?: string[];
-    i18n?: { locale?: string; fallbackLocale?: string; messages?: Record<string, { json?: Record<string, string>; groups?: Record<string, any> }> };
+    i18n?: { scope?: string; locale?: string; fallbackLocale?: string; messages?: Record<string, { json?: Record<string, string>; groups?: Record<string, any> }>; catalogs?: Record<string, { scope?: string; revision: number; messages: Record<string, any> }> };
     base?: string;
     baseUrl?: string;
     apiUrl?: string;
