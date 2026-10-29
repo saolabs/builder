@@ -117,7 +117,7 @@ test('bootstrap is optional and Vite fills aliases, entry, CSS and output for a 
     compiler.compileWithPhp = async () => ({lang: 'js', blade: '<p>Plain</p>', js: 'export default () => {};'});
     await compiler.buildContext(f.load(), f.root, 'web');
     assert.doesNotMatch(fs.readFileSync(path.join(f.root, 'resources/js/saola/app.web.js'), 'utf8'), /import contextBundle/);
-    const result = vite({context: 'web'}).config({root: f.root}, {command: 'build'});
+    const result = vite({context: 'web'}).config.handler({root: f.root}, {command: 'build'});
     assert.equal(result.build.rollupOptions.input.length, 2);
     assert.ok(result.resolve.alias.some(alias => alias.find === '@app'));
     assert.equal(result.build.manifest, 'manifest.json');

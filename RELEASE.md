@@ -1,3 +1,9 @@
+# Saola Builder v1.3.2
+
+Runs the Vite config hook after framework hooks so Laravel JS and CSS inputs survive automatic context setup. Adds a real Vite regression check using a framework plugin with post enforcement. Includes the legacy published-theme compatibility fix from 1.3.1.
+
+Validated with 51 builder tests, plain/theme SSR-hydration integration, and Gehihi web/admin builds and tests.
+
 # Saola Builder v1.3.1
 
 Preserves existing managed source publications before validating the newer package theme contract. Fixes builds of projects using legacy published admin themes; explicit package mode still validates descriptors strictly.

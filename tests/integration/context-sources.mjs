@@ -39,7 +39,8 @@ for (const name of ['vite', 'typescript', 'jsdom']) {
 }
 fs.mkdirSync(path.join(root, 'vendor/saola'), {recursive: true});
 fs.symlinkSync(compiler, path.join(root, 'vendor/saola/compiler'));
-put(root, 'vite.config.mjs', "import {defineConfig} from 'vite';import saola from '@saolabs/builder/vite';export default defineConfig({plugins:[saola({context:'studio',watch:false})]});\n");
+put(root, 'global.css', 'body {margin: 0;}');
+put(root, 'vite.config.mjs', "import {defineConfig} from 'vite';import saola from '@saolabs/builder/vite';export default defineConfig({plugins:[saola({context:'studio',watch:false}),{name:'framework-inputs',enforce:'post',config(config){return {build:{rollupOptions:{input:config.build?.rollupOptions?.input || ['resources/js/saola/app.studio.js','global.css']}}};}}]});\n");
 put(root, 'tsconfig.json', {extends:'./resources/js/saola/tsconfig.contexts.json',compilerOptions:{target:'ES2022',module:'ESNext',moduleResolution:'Bundler',strict:true,noEmit:true,skipLibCheck:true,lib:['ES2022','DOM','DOM.Iterable']},include:['resources/js/saola/**/*.ts','resources/saola/**/*.ts','api-check.ts']});
 put(root, 'resources/saola/studio/app/bootstrap.ts', "import {defineBundle} from '@saolabs/client';import type {} from './contracts';class Demo {next(value:number) {return value+1;}}export default defineBundle({name:'fixture/studio',services:{Demo}});\n");
 put(root, 'resources/saola/studio/app/contracts.ts', "export interface DemoApi {next(value:number):number;}declare module '@saolabs/client' {interface Application {Demo:import('@sao/studio/app/contracts').DemoApi;}interface ApplicationInterface {Demo:import('@sao/studio/app/contracts').DemoApi;}}\n");
@@ -56,6 +57,8 @@ for (const [mode, theme] of [['standalone', null], ['theme', 'paper'], ['theme',
     run('node', ['node_modules/@saolabs/builder/src/cli.js', 'studio'], root);
     run('node', ['node_modules/typescript/bin/tsc', '--noEmit'], root);
     run('node', ['node_modules/vite/bin/vite.js', 'build'], root);
+    const viteManifest = JSON.parse(fs.readFileSync(path.join(root, 'public/static/saola/studio/manifest.json')));
+    assert.ok(viteManifest['global.css'], 'framework stylesheet inputs must survive context plugin configuration');
     const metadata = JSON.parse(fs.readFileSync(path.join(root, 'public/static/saola/contexts.json'))).studio;
     assert.equal(metadata.mode, mode); assert.equal(metadata.theme, theme);
     const registry = fs.readFileSync(path.join(root, 'resources/js/saola/studio/registry.js'), 'utf8');

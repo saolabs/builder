@@ -174,7 +174,7 @@ test('an unowned compiled view is preserved and stops the output batch', async t
 test('Vite receives package aliases, both CSS entries and separate raw assets automatically', async t => {
     const f = fixture(t);
     const plugin = vitePlugin({context: 'admin'});
-    const result = plugin.config({root: f.root, build: {rollupOptions: {input: ['resources/js/saola/app.admin.js']}}}, {command: 'build'});
+    const result = plugin.config.handler({root: f.root, build: {rollupOptions: {input: ['resources/js/saola/app.admin.js']}}}, {command: 'build'});
     assert.equal(result.resolve.alias[0].find, '@sao/admin');
     assert.equal(result.build.rollupOptions.input.length, 3);
     const config = f.load();

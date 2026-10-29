@@ -79,9 +79,11 @@ function saolaPlugin(options = {}) {
 
     return {
         name: 'vite-plugin-saola',
+        // Framework plugins establish their JS/CSS inputs in config hooks.
+        // Extend that final input list instead of masking it with our fallback entry.
         
         // Run before Vite resolves config
-        config(viteConfig, { command }) {
+        config: { order: 'post', handler(viteConfig, { command }) {
             isDevMode = command === 'serve';
             loadConfig(path.resolve(viteConfig.root || process.cwd()));
             const aliases = ContextPackages.aliases(config);
@@ -103,7 +105,7 @@ function saolaPlugin(options = {}) {
                 resolve: {alias: aliases},
                 build: {outDir, manifest: viteConfig.build?.manifest ?? 'manifest.json', rollupOptions: {input: inputs, preserveEntrySignatures: viteConfig.build?.rollupOptions?.preserveEntrySignatures ?? 'exports-only'}},
             };
-        },
+        } },
 
         // Run when Vite server starts or build begins
         async buildStart() {
