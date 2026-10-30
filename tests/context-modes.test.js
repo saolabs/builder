@@ -146,3 +146,18 @@ test('explicit missing package or local theme fails clearly rather than falling 
     f.put('.env', 'SAOLA_WEB_MODE=theme\nSAOLA_WEB_THEME=missing\n');
     assert.throws(f.load, /theme mode requires/);
 });
+
+test('theme mode keeps view namespaces shared from outside the context and drops its other themes', t => {
+    const f = fixture(t); f.local('web');
+    f.put('resources/saola/web/themes/paper/views/pages/home.sao', '<template>Paper</template>');
+    f.put('resources/saola/web/themes/default/views/pages/home.sao', '<template>Default</template>');
+    f.put('resources/saola/_shared/views/editor.sao', '<template>Shared</template>');
+    f.put('sao.config.json', {contexts: {web: {mode: 'theme', theme: 'paper',
+        views: {'web.themes.default.views': 'web/themes/default/views', 'shared.ui': '_shared/views'},
+        blade: {'web.themes.default.views': 'web/themes/default/views', 'shared.ui': 'shared/ui'}}}});
+    const web = f.load().contexts.web;
+    assert.deepEqual(Object.keys(web.views), ['web.themes.paper.views', 'shared.ui']);
+    assert.equal(web.views['shared.ui'], '_shared/views');
+    assert.equal(web.blade['shared.ui'], 'shared/ui');
+    assert.equal(web.blade['web.themes.default.views'], undefined);
+});

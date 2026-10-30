@@ -1,3 +1,9 @@
+# Saola Builder v1.3.3
+
+Theme and standalone context modes keep view namespaces the project declares from outside the context (views shared between contexts, e.g. `gehihi.shared` → `_shared/views`) together with their Blade path. Before, the mode replaced the whole namespace map, so every `@include` of a shared view failed in the browser with "not found in registry" while SSR still rendered. The context's own view directories stay under the mode, so switching theme still drops the other theme's views.
+
+Validated with 52 builder tests (new regression in `context-modes.test.js`, failing without the fix), and the Gehihi web build: the shared agent editor is registered for web again and `/ai/my-agents/create` loads.
+
 # Saola Builder v1.3.2
 
 Runs the Vite config hook after framework hooks so Laravel JS and CSS inputs survive automatic context setup. Adds a real Vite regression check using a framework plugin with post enforcement. Includes the legacy published-theme compatibility fix from 1.3.1.

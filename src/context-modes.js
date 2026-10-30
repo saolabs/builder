@@ -83,9 +83,17 @@ function localContexts(config, root, env) {
         const metadata = {kind: selected, context: name, namespace, source: hostRoot, hostRoot, effectiveRoot, css, selectedTheme,
             manifest: {context: name, contract: 1, bootstrap: 'app/bootstrap.ts', types: local.types, themes: [], overridable: []}};
         if (local.types && (typeof local.types !== 'string' || path.isAbsolute(local.types) || local.types.split(/[\\/]/).includes('..'))) throw new Error(`Context ${name}: invalid types path`);
+        // The mode owns the context's own view directory (switching theme drops the other theme's views), but namespaces the
+        // project adds from outside it — views shared between contexts — stay, or every @include of them misses the registry.
+        const outside = rel => {
+            const abs = path.resolve(sourceRoot, rel);
+            return abs !== hostRoot && !abs.startsWith(hostRoot + path.sep);
+        };
+        const shared = Object.entries(host.views || {}).filter(([ns, rel]) => ns !== namespace && typeof rel === 'string' && outside(rel));
         config.contexts[name] = {...host, name: host.name || name, mode: selected,
             app: [path.join(effectiveRoot, 'app')],
-            views: {[namespace]: path.join(effectiveRoot, viewRelative)}, blade: {[namespace]: namespace.replaceAll('.', '/')},
+            views: {[namespace]: path.join(effectiveRoot, viewRelative), ...Object.fromEntries(shared)},
+            blade: {[namespace]: namespace.replaceAll('.', '/'), ...Object.fromEntries(shared.map(([ns]) => [ns, host.blade?.[ns] ?? ns.replaceAll('.', '/')]))},
             compiled: {views: `${name}/views`, registry: `${name}/registry.js`, ...host.compiled, app: null},
             _contextSource: metadata};
     }
