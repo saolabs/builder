@@ -351,9 +351,13 @@ class Compiler {
         }
         const assetPrefix = `${publicUrlBase.replace(/\/?$/, '')}/${assetScope}/assets/`;
         const sharedAppDir = String(paths.sharedApp || '_app');
-        const appRoot = ConfigManager.resolveAppPath(projectRoot, paths, '');
-        const helperProviderPath = path.join(appRoot, sharedAppDir, 'HelperProvider.ts');
-        const helperProviderSource = fs.existsSync(helperProviderPath)
+        const appRoot = paths.saoView
+            ? ConfigManager.resolveAppPath(projectRoot, paths, '')
+            : null;
+        const helperProviderPath = appRoot
+            ? path.join(appRoot, sharedAppDir, 'HelperProvider.ts')
+            : null;
+        const helperProviderSource = helperProviderPath && fs.existsSync(helperProviderPath)
             ? fs.readFileSync(helperProviderPath, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
             : '';
         const clientHelpers = [...new Set([...helperProviderSource.matchAll(/^ {4}([A-Za-z_$][\w$]*)\s*(?=\(|:)/gm)].map(match => match[1]))];
