@@ -350,6 +350,13 @@ class Compiler {
             assetScope = `themes/${themeMatch[1]}`;
         }
         const assetPrefix = `${publicUrlBase.replace(/\/?$/, '')}/${assetScope}/assets/`;
+        const sharedAppDir = String(paths.sharedApp || '_app');
+        const appRoot = ConfigManager.resolveAppPath(projectRoot, paths, '');
+        const helperProviderPath = path.join(appRoot, sharedAppDir, 'HelperProvider.ts');
+        const helperProviderSource = fs.existsSync(helperProviderPath)
+            ? fs.readFileSync(helperProviderPath, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
+            : '';
+        const clientHelpers = [...new Set([...helperProviderSource.matchAll(/^ {4}([A-Za-z_$][\w$]*)\s*(?=\(|:)/gm)].map(match => match[1]))];
         const relativePath = path.relative(viewsDir, saoFilePath);
         const fileNameNoExt = path.basename(saoFilePath, '.sao');
         const dirPath = path.dirname(relativePath);
@@ -379,8 +386,15 @@ class Compiler {
             emit: 'both',
             lang: isTypeScript ? 'ts' : 'js',
             idMode: this.compilerOptions?.idMode || 'terse',
-            assetPrefix
+            assetPrefix,
+            clientHelpers
         });
+
+        if (this.phpWorker) {
+            for (const warning of result.warnings || []) {
+                console.warn(`  ⚠️  ${warning}`);
+            }
+        }
 
         const jsFileExt = result.lang === 'ts' || isTypeScript ? '.ts' : '.js';
         const jsPath = path.join(compiledViewsDir, jsRelativeDir, fileNameNoExt + jsFileExt);
@@ -912,11 +926,13 @@ class Compiler {
             const optionNames = {
                 viewPath: 'view-path', functionName: 'fn', factoryName: 'factory',
                 namespace: 'namespace', emit: 'emit', lang: 'lang',
-                idMode: 'id-mode', assetPrefix: 'asset-prefix'
+                idMode: 'id-mode', assetPrefix: 'asset-prefix',
+                clientHelpers: 'client-helpers'
             };
             for (const [key, cliName] of Object.entries(optionNames)) {
                 if (options[key] !== undefined && options[key] !== null) {
-                    args.push(`--${cliName}=${options[key]}`);
+                    const value = Array.isArray(options[key]) ? JSON.stringify(options[key]) : options[key];
+                    args.push(`--${cliName}=${value}`);
                 }
             }
             if (options.sandbox) args.push('--sandbox');
