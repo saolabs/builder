@@ -57,7 +57,19 @@ class RegistryGenerator {
 
             if (lazyEnabled && !eagerSet.has(dotPath)) {
                 // Bundler cắt thành chunk riêng; ViewManager.view() await + unwrap .default
-                exports.push(`    '${dotPath}': () => import('./${relativePath}')`);
+                const readFile = options.readFile || (file => fs.readFileSync(file, 'utf8'));
+                let code = '';
+                try { code = readFile(fullViewPath); }
+                catch (error) { if (error.code !== 'ENOENT') throw error; }
+                // Compiler-owned JSON declaration, not arbitrary JavaScript evaluation.
+                // Carry it on the lazy loader so denied routes never import the chunk.
+                const declaration = /(?:^|\n)export const __SAOLA_MIDDLEWARE__ = (\[[^\r\n]*\]);/.exec(code);
+                const middleware = declaration ? JSON.parse(declaration[1]) : [];
+                if (!Array.isArray(middleware) || middleware.some(ref => typeof ref !== 'string')) {
+                    throw new TypeError(`Invalid middleware metadata: ${actualPath}`);
+                }
+                const loader = `() => import('./${relativePath}')`;
+                exports.push(`    '${dotPath}': ${middleware.length ? `Object.assign(${loader}, {middleware: ${JSON.stringify(middleware)}})` : loader}`);
             } else {
                 imports.push(`import ${factoryName} from './${relativePath}';`);
                 exports.push(`    '${dotPath}': ${factoryName}`);
