@@ -217,3 +217,15 @@ test('switching package -> standalone -> package cleans only owned views and kee
         assert.ok(fs.existsSync(path.join(f.root, f.source, 'themes/classic/views/pages/home.sao')));
     }
 });
+
+test('writeOwned forgets files of a root removed from config instead of failing the build', t => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'saola-owned-'));
+    t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+    const inventory = path.join(root, 'out/.inv.json');
+    const keep = path.join(root, 'out/a.js'), dropped = path.join(root, 'old/b.blade.php');
+    Packages.writeOwned(inventory, [path.join(root, 'out'), path.join(root, 'old')], new Map([[keep, 'a'], [dropped, 'b']]), root);
+    Packages.writeOwned(inventory, [path.join(root, 'out')], new Map([[keep, 'a2']]), root);
+    assert.equal(fs.readFileSync(keep, 'utf8'), 'a2');
+    assert.ok(fs.existsSync(dropped), 'never deletes outside the current roots');
+    assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(inventory, 'utf8'))), [keep]);
+});

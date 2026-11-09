@@ -161,9 +161,17 @@ class Compiler {
             process.exit(1);
         }
 
-        const contextConfig = contexts[contextName];
+        let contextConfig = contexts[contextName];
         this.packageOutput = ContextPackages.source(contextConfig) ? new Map() : null;
         ContextPackages.prepare(contextConfig, config, projectRoot);
+        // Every app context gets the shared views (a theme package has no app to share with).
+        const sharedViews = ContextPackages.sharedViewsDir(config, projectRoot);
+        if (!this.themeConfig && fs.existsSync(sharedViews)) {
+            const ns = ContextPackages.SHARED_VIEWS;
+            contextConfig = {...contextConfig,
+                views: {...contextConfig.views, [ns]: path.relative(path.resolve(projectRoot, paths.saoView), sharedViews)},
+                blade: {...contextConfig.blade, [ns]: ns}};
+        }
         
         console.log(`\n🔨 Building context: ${contextName}`);
         
@@ -373,8 +381,10 @@ class Compiler {
         const bladePath = path.join(bladeBaseDir, dirPath, `${fileNameNoExt}.blade.php`);
         const compiledViewsRelPath = contextConfig.compiled.views;
         const compiledViewsDir = ConfigManager.resolveCompiledPath(projectRoot, paths, compiledViewsRelPath);
-        const namespaceCount = Object.keys(contextConfig.views || {}).length;
-        const includeNamespaceInPath = namespaceCount > 1;
+        // Shared views always sit under `_views/` and do not count, so adding them never moves a context's own output.
+        const isShared = namespace === ContextPackages.SHARED_VIEWS;
+        const namespaceCount = Object.keys(contextConfig.views || {}).filter(ns => ns !== ContextPackages.SHARED_VIEWS).length;
+        const includeNamespaceInPath = isShared || namespaceCount > 1;
         const jsRelativeDir = includeNamespaceInPath 
             ? path.join(namespace, path.dirname(relativePath))
             : path.dirname(relativePath);

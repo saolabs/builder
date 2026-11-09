@@ -161,3 +161,25 @@ test('theme mode keeps view namespaces shared from outside the context and drops
     assert.equal(web.blade['shared.ui'], 'shared/ui');
     assert.equal(web.blade['web.themes.default.views'], undefined);
 });
+
+test('resources/saola/_views is shared by every context as _views.* without moving context output', async t => {
+    const f = fixture(t); f.local('web'); f.local('admin');
+    f.put('resources/saola/_views/genoffice/editor.sao', '<template>Editor</template>');
+    const compiler = new Compiler(); compiler.resolvePhpCompilerPath = () => 'test compiler';
+    const paths = [];
+    compiler.compileWithPhp = async (source, opts) => {
+        paths.push(opts.viewPath);
+        return {lang: 'js', blade: source, js: 'export default () => {};'};
+    };
+    const config = f.load();
+    for (const ctx of ['web', 'admin']) await compiler.buildContext(config, f.root, ctx);
+    assert.ok(paths.includes('_views.genoffice.editor'));
+    assert.match(fs.readFileSync(path.join(f.root, 'resources/views/_views/genoffice/editor.blade.php'), 'utf8'), /Editor/);
+    for (const ctx of ['web', 'admin']) {
+        assert.ok(fs.existsSync(path.join(f.root, `resources/js/saola/${ctx}/views/_views/genoffice/editor.js`)));
+        assert.ok(fs.existsSync(path.join(f.root, `resources/js/saola/${ctx}/views/pages/home.js`)), 'own views stay put');
+        assert.match(fs.readFileSync(path.join(f.root, `resources/js/saola/${ctx}/registry.js`), 'utf8'), /'_views\.genoffice\.editor'/);
+    }
+    assert.ok(Sources.watchRoots(config, f.root, ['web']).includes(path.join(f.root, 'resources/saola/_views')));
+    assert.equal(config.contexts.web.views._views, undefined, 'config is not mutated');
+});

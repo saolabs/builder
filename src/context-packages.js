@@ -132,8 +132,14 @@ function files(root, out = new Map(), prefix = '') {
 
 /** Write only builder-owned files. Preflight the entire batch before changing anything. */
 function writeOwned(inventoryFile, roots, content, anchor = path.dirname(inventoryFile)) {
-    const previous = fs.existsSync(inventoryFile) ? read(inventoryFile) : {};
     const permitted = file => roots.some(root => inside(path.resolve(root), path.resolve(file)));
+    // A root dropped from config (a namespace removed or renamed) leaves its files in the inventory; forget them rather than
+    // refuse every build — never delete outside today's roots.
+    const previous = Object.fromEntries(Object.entries(fs.existsSync(inventoryFile) ? read(inventoryFile) : {}).filter(([file]) => {
+        if (permitted(file) || content.has(file)) return true;
+        console.warn(`  ⚠️  ${file} is outside the current output roots; left in place, no longer tracked`);
+        return false;
+    }));
     for (const file of new Set([...Object.keys(previous), ...content.keys()])) {
         if (!permitted(file)) throw new Error(`Generated output escapes its scope: ${file}`);
         if (!inside(path.resolve(anchor), path.resolve(file))) throw new Error(`Generated output escapes its project: ${file}`);
@@ -198,15 +204,21 @@ function aliases(config) {
     return resolved;
 }
 
+// Views shared by every context: resources/saola/{paths.sharedViews || '_views'}/**, always named `_views.*`
+// (registry key, Blade under resources/views/_views/, compiled under {ctx}/views/_views/). Contract: docs/EXTENSION_ARCHITECTURE.md.
+const SHARED_VIEWS = '_views';
+const sharedViewsDir = (config, projectRoot) =>
+    path.resolve(projectRoot, config.paths?.saoView || 'resources/saola', config.paths?.sharedViews || SHARED_VIEWS);
+
 function watchRoots(config, projectRoot, names) {
-    return [...new Set(names.flatMap(name => {
+    return [...new Set([sharedViewsDir(config, projectRoot), ...names.flatMap(name => {
         const ctx = config.contexts?.[name];
         if (!ctx) return [];
         const ctxSource = source(ctx);
         if (ctxSource) return [ctxSource.source, ctxSource.hostRoot,
             path.resolve(projectRoot, config.paths?.saoView || 'resources/saola', config.paths?.sharedApp || '_app')];
         return [...Object.values(ctx.views || {}), ...(ctx.app || [])].map(p => path.resolve(projectRoot, config.paths.saoView || '', p));
-    }))];
+    })])];
 }
 
-module.exports = { discover, configure, prepare, aliases, watchRoots, files, writeOwned, slash, source };
+module.exports = { discover, configure, prepare, aliases, watchRoots, files, writeOwned, slash, source, SHARED_VIEWS, sharedViewsDir };
