@@ -1,4 +1,6 @@
-# Saola Builder v1.6.0
+# Saola Builder v1.6.1
+
+Same content as the v1.6.0 git tag, which was cut before `package.json` was bumped; use 1.6.1.
 
 Shared views in `resources/saola/_views` are compiled and registered as `_views.*` for every context. Context packages may declare theme namespaces as `<context>.themes.<theme>` (the published layout) as well as `<context>.<theme>`: Blade paths, per-theme registries and view prefixes follow the manifest's `view_context`, and a manifest still cannot claim another context or theme.
 
