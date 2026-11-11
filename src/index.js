@@ -1173,13 +1173,13 @@ class Compiler {
             const pkg = ContextPackages.source(contextConfig);
             pkg.themeRegistries = {};
             for (const theme of pkg.manifest.themes) {
-                const prefix = `${contextName}.${theme}/`;
+                const prefix = `${pkg.themeNamespaces?.[theme] || `${contextName}.${theme}`}/`;
                 const entries = compiledViews.filter(entry => entry.namingPath.startsWith(prefix));
                 const themedPath = registryFullPath.replace(/\.(js|ts)$/, `.${theme}.js`);
                 RegistryGenerator.generate(contextName, entries, themedPath, viewsDir, {...registryOptions, lazy: false});
                 pkg.themeRegistries[theme] = themedPath.replace(/\.js$/, entries.some(entry => entry.actualPath.endsWith('.ts')) ? '.ts' : '.js');
             }
-            const prefixes = pkg.manifest.themes.map(theme => `${contextName}.${theme}/`);
+            const prefixes = pkg.manifest.themes.map(theme => `${pkg.themeNamespaces?.[theme] || `${contextName}.${theme}`}/`);
             compiledViews = compiledViews.filter(entry => !prefixes.some(prefix => entry.namingPath.startsWith(prefix)));
         }
         RegistryGenerator.generate(

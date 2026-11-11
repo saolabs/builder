@@ -60,7 +60,7 @@ test('custom vendor directory and Composer v1 inventory are supported', t => {
     assert.equal(f.load().contexts.admin._contextPackage.package, 'acme/panel');
 });
 
-test('legacy published theme descriptors are skipped unless package mode is explicit', t => {
+test('published theme namespaces are preserved when package mode is explicit', t => {
     const f = fixture(t);
     f.put('resources/saola/admin/.publish-state.json', {});
     f.put(f.source + 'themes/classic/theme.manifest.json', {
@@ -68,7 +68,10 @@ test('legacy published theme descriptors are skipped unless package mode is expl
     });
     assert.equal(f.load().contexts.admin._contextPackage, undefined);
     f.put('sao.config.json', {contexts: {admin: {mode: 'package'}}});
-    assert.throws(f.load, /Invalid theme manifest/);
+    const config = f.load();
+    assert.ok(config.contexts.admin.views['admin.themes.classic']);
+    assert.equal(config.contexts.admin.blade['admin.themes.classic'], 'admin/themes/classic');
+    assert.equal(config.contexts.admin._contextPackage.themeNamespaces.classic, 'admin.themes.classic');
 });
 
 test('installing a context does not skip normalization of existing legacy contexts', t => {
@@ -215,6 +218,30 @@ test('switching package -> standalone -> package cleans only owned views and kee
         assert.ok(fs.existsSync(installed));
         assert.ok(fs.existsSync(path.join(f.root, 'resources/saola/admin/views/pages/home.sao')));
         assert.ok(fs.existsSync(path.join(f.root, f.source, 'themes/classic/views/pages/home.sao')));
+    }
+});
+
+test('canonical theme namespaces compile into matching Blade and isolated theme registries', async t => {
+    const f = fixture(t);
+    for (const name of ['classic', 'material']) {
+        f.put(f.source + `themes/${name}/theme.manifest.json`, {name, contract: 1, view_context: `admin.themes.${name}`, views: 'views'});
+    }
+    const compiler = new Compiler();
+    compiler.resolvePhpCompilerPath = () => 'test-compiler';
+    compiler.compileWithPhp = async source => ({lang: 'js', blade: source, js: 'export default function View() {}'});
+    await compiler.buildContext(f.load(), f.root, 'admin');
+    assert.match(fs.readFileSync(path.join(f.root, 'resources/views/admin/themes/classic/pages/home.blade.php'), 'utf8'), /classic original/);
+    const classic = fs.readFileSync(path.join(f.root, 'resources/js/saola/admin/registry.classic.js'), 'utf8');
+    assert.match(classic, /admin\.themes\.classic/);
+    assert.doesNotMatch(classic, /admin\.themes\.material/);
+    assert.doesNotMatch(fs.readFileSync(path.join(f.root, 'resources/js/saola/admin/registry.js'), 'utf8'), /admin\.themes\.(classic|material)/);
+});
+
+test('a theme namespace cannot escape or claim another context or theme', t => {
+    const f = fixture(t);
+    for (const namespace of ['web.themes.classic', 'admin.themes.material', 'admin.themes.classic.extra', '../classic']) {
+        f.put(f.source + 'themes/classic/theme.manifest.json', {name: 'classic', contract: 1, view_context: namespace, views: 'views'});
+        assert.throws(f.load, /Invalid theme manifest/);
     }
 });
 

@@ -1,3 +1,9 @@
+# Saola Builder v1.6.0
+
+Shared views in `resources/saola/_views` are compiled and registered as `_views.*` for every context. Context packages may declare theme namespaces as `<context>.themes.<theme>` (the published layout) as well as `<context>.<theme>`: Blade paths, per-theme registries and view prefixes follow the manifest's `view_context`, and a manifest still cannot claim another context or theme.
+
+Validated with 57 builder tests, including new regressions for canonical theme namespaces and namespace escape.
+
 # Saola Builder v1.3.3
 
 Theme and standalone context modes keep view namespaces the project declares from outside the context (views shared between contexts, e.g. `gehihi.shared` → `_shared/views`) together with their Blade path. Before, the mode replaced the whole namespace map, so every `@include` of a shared view failed in the browser with "not found in registry" while SSR still rendered. The context's own view directories stay under the mode, so switching theme still drops the other theme's views.

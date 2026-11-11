@@ -10,6 +10,9 @@ const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const slash = value => value.split(path.sep).join('/');
 const hash = data => crypto.createHash('sha256').update(data).digest('hex');
 const inside = (root, file) => file === root || file.startsWith(root + path.sep);
+// Published packages use context.themes.theme; keep the earlier short contract too.
+const validThemeNamespace = (namespace, context, theme) =>
+    namespace === `${context}.${theme}` || namespace === `${context}.themes.${theme}`;
 
 function localPath(root, relative, label) {
     if (typeof relative !== 'string' || !relative || path.isAbsolute(relative)) throw new Error(`${label}: expected a relative path`);
@@ -48,7 +51,7 @@ function discover(projectRoot, accept = () => true) {
             for (const name of manifest.themes) {
                 if (!/^[a-z][a-z0-9_-]*$/.test(name)) throw new Error(`Invalid theme in ${file}`);
                 const theme = read(localPath(source, `themes/${name}/theme.manifest.json`, pkg.name));
-                if (theme.name !== name || theme.view_context !== `${context}.${name}` || theme.contract !== 1) throw new Error(`Invalid theme manifest: ${pkg.name}/${name}`);
+                if (theme.name !== name || !validThemeNamespace(theme.view_context, context, name) || theme.contract !== 1) throw new Error(`Invalid theme manifest: ${pkg.name}/${name}`);
                 localPath(source, `themes/${name}/${theme.views || 'views'}`, pkg.name);
                 if (theme.css) localPath(source, `themes/${name}/${theme.css}`, pkg.name);
             }
@@ -86,17 +89,19 @@ function configure(config, projectRoot) {
         const views = {};
         const blade = {};
         const css = {};
+        const themeNamespaces = {};
         for (const themeName of pkg.manifest.themes) {
             const hostManifest = path.join(hostThemes, themeName, 'theme.manifest.json');
             const theme = read(fs.existsSync(hostManifest) ? hostManifest : path.join(pkg.source, 'themes', themeName, 'theme.manifest.json'));
-            if (!/^[a-z][a-z0-9_-]*$/.test(themeName) || theme.name !== themeName || theme.view_context !== `${name}.${themeName}` || theme.contract !== 1) throw new Error(`Invalid project theme: ${name}/${themeName}`);
+            if (!/^[a-z][a-z0-9_-]*$/.test(themeName) || theme.name !== themeName || !validThemeNamespace(theme.view_context, name, themeName) || theme.contract !== 1) throw new Error(`Invalid project theme: ${name}/${themeName}`);
             // All descriptor paths are scoped to the effective theme root.
             const themeRoot = fs.existsSync(hostManifest) ? path.dirname(hostManifest) : path.join(pkg.source, 'themes', themeName);
             localPath(themeRoot, theme.views || 'views', `${name}/${themeName}`);
             if (theme.css) localPath(themeRoot, theme.css, `${name}/${themeName}`);
-            const namespace = `${name}.${themeName}`;
+            const namespace = theme.view_context;
+            themeNamespaces[themeName] = namespace;
             views[namespace] = path.join(effectiveRoot, 'themes', themeName, theme.views || 'views');
-            blade[namespace] = `${name}/${themeName}`;
+            blade[namespace] = namespace.replace(/\./g, '/');
             if (theme.css) {
                 const relative = `themes/${themeName}/${theme.css}`;
                 css[slash(path.relative(projectRoot, path.join(hostRoot, relative)))] = slash(path.relative(projectRoot, path.join(effectiveRoot, relative)));
@@ -111,7 +116,7 @@ function configure(config, projectRoot) {
             app: [...app, ...(host.app || []).filter(p => path.resolve(projectRoot, config.paths.saoView, p) !== path.join(hostRoot, 'app'))],
             views: { ...views, ...host.views }, blade: { ...blade, ...host.blade },
             compiled: { views: `${name}/views`, registry: `${name}/registry.js`, ...host.compiled, app: null },
-            _contextPackage: { ...pkg, kind: 'package', hostRoot, effectiveRoot, css },
+            _contextPackage: { ...pkg, themeNamespaces, kind: 'package', hostRoot, effectiveRoot, css },
         };
     }
     return Modes.localContexts(config, projectRoot, env);
