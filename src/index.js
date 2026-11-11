@@ -140,6 +140,23 @@ class Compiler {
     }
 
     /**
+     * Có bảo compiler phát "dòng gộp" cho `@foreach` không (saola/compiler ≥ 3.8).
+     *
+     * Output đó gọi `this.__fused(...)`, chỉ có từ `@saolabs/client` 1.10 — client
+     * cũ ném lỗi ngay lúc render. Vì vậy chỉ bật khi client CÀI TRONG DỰ ÁN đủ mới.
+     * Gói theme chạy trên client của app cài nó (không biết trước) nên mặc định tắt.
+     * `compiler.fuseRows` (true/false) trong sao.config.json ghi đè cả hai.
+     */
+    fuseRowsEnabled() {
+        const explicit = this.compilerOptions?.fuseRows;
+        if (typeof explicit === 'boolean') return explicit;
+        if (this.themeConfig) return false;
+        const version = this.readPackageVersion(path.join(this.projectRoot || process.cwd(), 'node_modules', '@saolabs', 'client'));
+        const match = /^(\d+)\.(\d+)\./.exec(String(version || ''));
+        return !!match && (Number(match[1]) > 1 || (Number(match[1]) === 1 && Number(match[2]) >= 10));
+    }
+
+    /**
      * Build single context without updating views.ts
      * Used internally for both single and all-context builds
      */
@@ -400,6 +417,7 @@ class Compiler {
             emit: 'both',
             lang: isTypeScript ? 'ts' : 'js',
             idMode: this.compilerOptions?.idMode || 'terse',
+            fuseRows: this.fuseRowsEnabled(),
             assetPrefix,
             clientHelpers
         });
@@ -940,7 +958,7 @@ class Compiler {
             const optionNames = {
                 viewPath: 'view-path', functionName: 'fn', factoryName: 'factory',
                 namespace: 'namespace', emit: 'emit', lang: 'lang',
-                idMode: 'id-mode', assetPrefix: 'asset-prefix',
+                idMode: 'id-mode', assetPrefix: 'asset-prefix', fuseRows: 'fuse-rows',
                 clientHelpers: 'client-helpers'
             };
             for (const [key, cliName] of Object.entries(optionNames)) {

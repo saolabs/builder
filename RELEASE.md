@@ -1,3 +1,9 @@
+# Saola Builder v1.7.0
+
+Passes the new `fuseRows` option to `saola/compiler` 3.8.0 (fused `@foreach` rows). It is enabled only when the project's installed `@saolabs/client` is ≥ 1.10.0, because fused output calls a runtime method older clients do not have. Theme packages are built with it off by default (they run on the installing app's client). `compiler.fuseRows` (`true` / `false`) in `sao.config.json` overrides both. Older compilers ignore the option.
+
+Validated with 57 builder tests plus new manifest-contract checks for the version gate.
+
 # Saola Builder v1.6.1
 
 Same content as the v1.6.0 git tag, which was cut before `package.json` was bumped; use 1.6.1.
