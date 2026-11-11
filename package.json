@@ -1,21 +1,29 @@
 {
     "name": "@saolabs/builder",
-    "version": "1.0.1",
+    "version": "1.7.0",
     "description": "Saola Builder - builds .sao applications with the saola/compiler Composer package",
     "main": "src/index.js",
     "exports": {
         ".": "./src/index.js",
         "./vite": "./src/vite-plugin.js",
         "./webpack": "./src/webpack-plugin.js",
-        "./package.json": "./package.json"
+        "./package.json": "./package.json",
+        "./dist": {
+            "types": "./src/dist.d.ts",
+            "default": "./src/dist.js"
+        }
     },
     "files": [
-        "src/"
+        "src/",
+        "docs/STANDALONE_DIST.md",
+        "docs/CONTEXT_PACKAGES.md",
+        "examples/standalone/"
     ],
     "type": "commonjs",
     "scripts": {
         "check": "npm ci --dry-run --ignore-scripts && npm audit && npm test && npm run check:pack",
-        "test": "node src/test.js && node tests/test_typed_output.js && node tests/test_manifest_contract.js",
+        "test": "node src/test.js && node tests/test_typed_output.js && node tests/test_manifest_contract.js && node tests/test_theme_install_safety.js && node --test tests/dist.test.js tests/watcher.test.js tests/directives.test.js tests/context-packages.test.js tests/context-modes.test.js",
+        "test:context-sources": "node tests/integration/context-sources.mjs",
         "check:pack": "npm pack --dry-run --ignore-scripts",
         "publish-dry-run": "npm publish --dry-run",
         "prepublishOnly": "npm test && echo 'Ready to publish @saolabs/builder'"
@@ -44,13 +52,16 @@
     "bin": {
         "sao-compile": "src/cli.js",
         "sao-build": "src/build-cli.js",
-        "sao-dev": "src/dev-cli.js"
+        "sao-dev": "src/dev-cli.js",
+        "sao-dist": "src/dist-cli.js"
     },
     "directories": {
         "doc": "docs",
         "example": "examples"
     },
     "dependencies": {
-        "chokidar": "^3.6.0"
+        "chokidar": "^4.0.3",
+        "dotenv": "^16.6.1",
+        "dotenv-expand": "^12.0.3"
     }
 }

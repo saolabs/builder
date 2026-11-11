@@ -1,0 +1,53 @@
+# Saola Builder v1.7.0
+
+Passes the new `fuseRows` option to `saola/compiler` 3.8.0 (fused `@foreach` rows). It is enabled only when the project's installed `@saolabs/client` is ≥ 1.10.0, because fused output calls a runtime method older clients do not have. Theme packages are built with it off by default (they run on the installing app's client). `compiler.fuseRows` (`true` / `false`) in `sao.config.json` overrides both. Older compilers ignore the option.
+
+Validated with 57 builder tests plus new manifest-contract checks for the version gate.
+
+# Saola Builder v1.6.1
+
+Same content as the v1.6.0 git tag, which was cut before `package.json` was bumped; use 1.6.1.
+
+Shared views in `resources/saola/_views` are compiled and registered as `_views.*` for every context. Context packages may declare theme namespaces as `<context>.themes.<theme>` (the published layout) as well as `<context>.<theme>`: Blade paths, per-theme registries and view prefixes follow the manifest's `view_context`, and a manifest still cannot claim another context or theme.
+
+Validated with 57 builder tests, including new regressions for canonical theme namespaces and namespace escape.
+
+# Saola Builder v1.3.3
+
+Theme and standalone context modes keep view namespaces the project declares from outside the context (views shared between contexts, e.g. `gehihi.shared` → `_shared/views`) together with their Blade path. Before, the mode replaced the whole namespace map, so every `@include` of a shared view failed in the browser with "not found in registry" while SSR still rendered. The context's own view directories stay under the mode, so switching theme still drops the other theme's views.
+
+Validated with 52 builder tests (new regression in `context-modes.test.js`, failing without the fix), and the Gehihi web build: the shared agent editor is registered for web again and `/ai/my-agents/create` loads.
+
+# Saola Builder v1.3.2
+
+Runs the Vite config hook after framework hooks so Laravel JS and CSS inputs survive automatic context setup. Adds a real Vite regression check using a framework plugin with post enforcement. Includes the legacy published-theme compatibility fix from 1.3.1.
+
+Validated with 51 builder tests, plain/theme SSR-hydration integration, and Gehihi web/admin builds and tests.
+
+# Saola Builder v1.3.1
+
+Preserves existing managed source publications before validating the newer package theme contract. Fixes builds of projects using legacy published admin themes; explicit package mode still validates descriptors strictly.
+
+Validated with the builder suite and the Gehihi consumer build.
+
+# Saola Builder v1.3.0
+
+Adds conventional plain/theme/package context modes and distributable context manifests. Rebuilds are serialized, environment changes reload configuration, dotted namespaces resolve consistently, and theme installation keeps generated views safe. Includes context integration and watcher regression coverage.
+
+Validated with the compiler, manifest, distribution and 50 Node tests (polling watcher on macOS). Distributed through the GitHub tag and package archive, matching existing consumer dependency URLs.
+
+# Saola Builder v1.0.2
+
+Build tools and Vite/Webpack integrations for .sao applications, including context-scoped SPA/static distributions. File watching now uses Chokidar 4 and path filters without glob dependencies.
+
+## Compatibility
+
+PHP compiler package saola/compiler is installed separately. Chokidar 4 requires Node >=14.16; the ecosystem toolchain is tested on Node 25.
+
+## Validation
+
+Audit, compiler/manifest/dist tests, real-file watcher regression and package dry-run passed.
+
+## Release scope
+
+Coordinated v1.0.2 registry release using the tested v1.0.0 source. Package manifests are normalized to 1.0.2 for registry availability. Runtime source is unchanged from v1.0.0. Existing tags and previously published versions are preserved.

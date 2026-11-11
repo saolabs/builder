@@ -1,0 +1,107 @@
+{
+  "paths": {
+    "resources": "src",
+    "saoView": "src",
+    "bladeView": ".generated/blade",
+    "compiled": ".generated/js",
+    "public": ".generated/public"
+  },
+  "contexts": {
+    "web": {
+      "name": "Web",
+      "app": [],
+      "views": {
+        "web": "web/views"
+      },
+      "blade": {
+        "web": "web"
+      },
+      "compiled": {
+        "views": "web/views",
+        "app": "web/app",
+        "registry": "web/registry.js"
+      },
+      "router": {
+        "mode": "history",
+        "routes": [
+          {
+            "path": "/",
+            "component": "web.home"
+          },
+          {
+            "path": "/about",
+            "component": "web.about"
+          }
+        ]
+      },
+      "dist": {
+        "html": {
+          "title": "Saola standalone SPA",
+          "lang": "en",
+          "containerId": "web-app"
+        },
+        "view": {
+          "systemData": {
+            "__base__": "web.",
+            "__layout__": "web.layouts."
+          }
+        },
+        "assets": [
+          {
+            "from": "assets",
+            "to": "assets"
+          }
+        ],
+        "styles": [
+          "/assets/site.css"
+        ]
+      }
+    },
+    "mobile": {
+      "name": "Mobile",
+      "app": [],
+      "views": {
+        "mobile": "mobile/views"
+      },
+      "blade": {
+        "mobile": "mobile"
+      },
+      "compiled": {
+        "views": "mobile/views",
+        "app": "mobile/app",
+        "registry": "mobile/registry.js"
+      },
+      "router": {
+        "mode": "hash",
+        "routes": [
+          {
+            "path": "/",
+            "component": "mobile.home"
+          },
+          {
+            "path": "/about",
+            "component": "mobile.about"
+          }
+        ]
+      },
+      "dist": {
+        "html": {
+          "title": "Saola mobile SPA",
+          "containerId": "mobile-app"
+        },
+        "assets": [
+          {
+            "from": "assets",
+            "to": "assets"
+          }
+        ],
+        "styles": [
+          "/assets/site.css"
+        ]
+      }
+    }
+  },
+  "dist": {
+    "defaultContext": "web"
+  }
+}

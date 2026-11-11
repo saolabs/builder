@@ -18,6 +18,7 @@ const { spawn } = require('child_process');
 const crypto = require('crypto');
 const ConfigManager = require('./config-manager');
 const { RegistryGenerator } = require('./registry-generator');
+const ContextPackages = require('./context-packages');
 
 /**
  * Làm trắng vùng `{{-- --}}` và `@verbatim`, GIỮ NGUYÊN độ dài.
@@ -82,6 +83,7 @@ class Compiler {
 
     constructor() {
         this.watcherInstances = [];
+        this.rebuildQueues = [];
         this.projectRoot = process.cwd();
         this.phpCompilerPath = this.resolvePhpCompilerPath(this.projectRoot, false);
         this.phpWorker = null;
@@ -138,6 +140,23 @@ class Compiler {
     }
 
     /**
+     * Có bảo compiler phát "dòng gộp" cho `@foreach` không (saola/compiler ≥ 3.8).
+     *
+     * Output đó gọi `this.__fused(...)`, chỉ có từ `@saolabs/client` 1.10 — client
+     * cũ ném lỗi ngay lúc render. Vì vậy chỉ bật khi client CÀI TRONG DỰ ÁN đủ mới.
+     * Gói theme chạy trên client của app cài nó (không biết trước) nên mặc định tắt.
+     * `compiler.fuseRows` (true/false) trong sao.config.json ghi đè cả hai.
+     */
+    fuseRowsEnabled() {
+        const explicit = this.compilerOptions?.fuseRows;
+        if (typeof explicit === 'boolean') return explicit;
+        if (this.themeConfig) return false;
+        const version = this.readPackageVersion(path.join(this.projectRoot || process.cwd(), 'node_modules', '@saolabs', 'client'));
+        const match = /^(\d+)\.(\d+)\./.exec(String(version || ''));
+        return !!match && (Number(match[1]) > 1 || (Number(match[1]) === 1 && Number(match[2]) >= 10));
+    }
+
+    /**
      * Build single context without updating views.ts
      * Used internally for both single and all-context builds
      */
@@ -159,12 +178,22 @@ class Compiler {
             process.exit(1);
         }
 
-        const contextConfig = contexts[contextName];
+        let contextConfig = contexts[contextName];
+        this.packageOutput = ContextPackages.source(contextConfig) ? new Map() : null;
+        ContextPackages.prepare(contextConfig, config, projectRoot);
+        // Every app context gets the shared views (a theme package has no app to share with).
+        const sharedViews = ContextPackages.sharedViewsDir(config, projectRoot);
+        if (!this.themeConfig && fs.existsSync(sharedViews)) {
+            const ns = ContextPackages.SHARED_VIEWS;
+            contextConfig = {...contextConfig,
+                views: {...contextConfig.views, [ns]: path.relative(path.resolve(projectRoot, paths.saoView), sharedViews)},
+                blade: {...contextConfig.blade, [ns]: ns}};
+        }
         
         console.log(`\n🔨 Building context: ${contextName}`);
         
         // Clean temp folder for this context BEFORE compiling
-        await this.cleanContextTemp(contextConfig, projectRoot, paths, contextName);
+        if (!this.packageOutput) await this.cleanContextTemp(contextConfig, projectRoot, paths, contextName);
         
         // Initialize compiled views tracking for this context
         this.compiledViews[contextName] = [];
@@ -231,7 +260,7 @@ class Compiler {
             }
         }
 
-        if (totalFiles === 0) {
+        if (totalFiles === 0 && !this.packageOutput) {
             console.log('ℹ️  No .sao files found\n');
             return;
         }
@@ -254,7 +283,7 @@ class Compiler {
         await this.copyAppFiles(contextConfig, projectRoot, paths, contextName);
         
         // Quét Blade mồ côi — SAU khi ghi xong, không phải xoá cây trước.
-        this.sweepOrphanBlade(contextConfig, projectRoot, paths);
+        if (!this.packageOutput) this.sweepOrphanBlade(contextConfig, projectRoot, paths);
 
         // Generate registry after all views compiled
         await this.generateRegistry(contextConfig, projectRoot, paths, contextName);
@@ -265,7 +294,21 @@ class Compiler {
             await this.generateThemeEntry(contextConfig, projectRoot, paths, contextName);
         } else {
             await this.generateAppEntry(contextConfig, projectRoot, paths, contextName);
+        }
+        if (this.packageOutput) {
+            this.generateContextTypes(config, projectRoot);
+            const compiledRoot = ConfigManager.resolveCompiledPath(projectRoot, paths, '');
+            // Local views and packaged themes share this context's output scope.
+            // Keep it valid when switching layouts; inventories still permit
+            // removing only unchanged files previously written by this builder.
+            const bladeRoots = [ConfigManager.resolveBladePath(projectRoot, paths, contextName),
+                ...Object.values(contextConfig.blade || {}).map(p => ConfigManager.resolveBladePath(projectRoot, paths, p))];
+            ContextPackages.writeOwned(path.join(compiledRoot, `.context-output-${contextName}.json`), [compiledRoot, ...bladeRoots], this.packageOutput, projectRoot);
+            this.packageOutput = null;
+        }
+        if (!this.themeConfig) {
             this.writeBuildManifest(projectRoot, paths);
+            this.writeContextMetadata(contextConfig, projectRoot, paths, contextName);
         }
         
         // Track this context as compiled
@@ -313,9 +356,36 @@ class Compiler {
         // Theme có kho asset riêng: `asset('logo.svg')` trong theme mà dùng prefix
         // của context sẽ trỏ vào assets của APP — hoặc 404, hoặc tệ hơn là hiện
         // đúng file của app mà không ai nhận ra. Xem EXTENSION_ARCHITECTURE §8.5.5.
+        // Gói theme: `themes/{context}/{slug}` — NGOÀI `{public}/{ctx}/` vì Vite
+        // emptyOutDir xoá sạch thư mục đó mỗi lần build app. Khớp
+        // `ThemeService::publicBase()` và đích symlink của `saola:theme:install`.
         const themeMatch = /^themes\.([A-Za-z0-9_-]+)/.exec(namespace);
-        const assetScope = themeMatch ? `themes/${themeMatch[1]}` : contextName;
+        let assetScope = contextName;
+        if (ContextPackages.source(contextConfig)?.kind === 'standalone') {
+            assetScope = contextName;
+        } else if (ContextPackages.source(contextConfig)?.kind === 'theme') {
+            assetScope = `${contextName}/themes/${ContextPackages.source(contextConfig).selectedTheme}`;
+        } else if (this.themeConfig && this.themeConfig.slug) {
+            assetScope = `themes/${this.themeConfig.context || 'web'}/${this.themeConfig.slug}`;
+        } else if (namespace.startsWith(contextName + '.themes.') && namespace.endsWith('.views')) {
+            assetScope = `${contextName}/themes/${namespace.slice((contextName + '.themes.').length, -'.views'.length)}`;
+        } else if (namespace.startsWith(contextName + '.')) {
+            assetScope = `${contextName}/themes/${namespace.slice(contextName.length + 1)}`;
+        } else if (themeMatch) {
+            assetScope = `themes/${themeMatch[1]}`;
+        }
         const assetPrefix = `${publicUrlBase.replace(/\/?$/, '')}/${assetScope}/assets/`;
+        const sharedAppDir = String(paths.sharedApp || '_app');
+        const appRoot = paths.saoView
+            ? ConfigManager.resolveAppPath(projectRoot, paths, '')
+            : null;
+        const helperProviderPath = appRoot
+            ? path.join(appRoot, sharedAppDir, 'HelperProvider.ts')
+            : null;
+        const helperProviderSource = helperProviderPath && fs.existsSync(helperProviderPath)
+            ? fs.readFileSync(helperProviderPath, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
+            : '';
+        const clientHelpers = [...new Set([...helperProviderSource.matchAll(/^ {4}([A-Za-z_$][\w$]*)\s*(?=\(|:)/gm)].map(match => match[1]))];
         const relativePath = path.relative(viewsDir, saoFilePath);
         const fileNameNoExt = path.basename(saoFilePath, '.sao');
         const dirPath = path.dirname(relativePath);
@@ -328,8 +398,10 @@ class Compiler {
         const bladePath = path.join(bladeBaseDir, dirPath, `${fileNameNoExt}.blade.php`);
         const compiledViewsRelPath = contextConfig.compiled.views;
         const compiledViewsDir = ConfigManager.resolveCompiledPath(projectRoot, paths, compiledViewsRelPath);
-        const namespaceCount = Object.keys(contextConfig.views || {}).length;
-        const includeNamespaceInPath = namespaceCount > 1;
+        // Shared views always sit under `_views/` and do not count, so adding them never moves a context's own output.
+        const isShared = namespace === ContextPackages.SHARED_VIEWS;
+        const namespaceCount = Object.keys(contextConfig.views || {}).filter(ns => ns !== ContextPackages.SHARED_VIEWS).length;
+        const includeNamespaceInPath = isShared || namespaceCount > 1;
         const jsRelativeDir = includeNamespaceInPath 
             ? path.join(namespace, path.dirname(relativePath))
             : path.dirname(relativePath);
@@ -345,20 +417,28 @@ class Compiler {
             emit: 'both',
             lang: isTypeScript ? 'ts' : 'js',
             idMode: this.compilerOptions?.idMode || 'terse',
-            assetPrefix
+            fuseRows: this.fuseRowsEnabled(),
+            assetPrefix,
+            clientHelpers
         });
+
+        if (this.phpWorker) {
+            for (const warning of result.warnings || []) {
+                console.warn(`  ⚠️  ${warning}`);
+            }
+        }
 
         const jsFileExt = result.lang === 'ts' || isTypeScript ? '.ts' : '.js';
         const jsPath = path.join(compiledViewsDir, jsRelativeDir, fileNameNoExt + jsFileExt);
 
         this.ensureDir(path.dirname(bladePath));
         this.ensureDir(path.dirname(jsPath));
-        fs.writeFileSync(bladePath, result.blade, 'utf-8');
+        this.writeOutput(bladePath, result.blade);
         this.writtenBlade?.add(path.resolve(bladePath));
-        fs.writeFileSync(jsPath, result.js, 'utf-8');
+        this.writeOutput(jsPath, result.js);
         // A declaration annotation can switch an existing generated view to TS.
         const alternatePath = path.join(compiledViewsDir, jsRelativeDir, fileNameNoExt + (jsFileExt === '.ts' ? '.js' : '.ts'));
-        if (fs.existsSync(alternatePath)) {
+        if (!this.packageOutput && fs.existsSync(alternatePath)) {
             const previous = fs.readFileSync(alternatePath, 'utf-8');
             if (previous.includes(`const __VIEW_PATH__ = '${viewPath}';`)) fs.unlinkSync(alternatePath);
         }
@@ -831,13 +911,39 @@ class Compiler {
         return null;
     }
 
+    /**
+     * Thư mục project cho `saoc --directives` (saoc tự dò `sao.directives.php`
+     * của app và `extra.saola.directives` của package), hoặc null khi project
+     * không khai báo gì — để compiler cũ không biết cờ này vẫn build được.
+     */
+    resolveDirectivesRoot() {
+        const root = this.projectRoot || process.cwd();
+        if (this.directivesRootFor === root) return this.directivesRoot;
+        let declared = fs.existsSync(path.join(root, 'sao.directives.php'));
+        const installed = path.join(root, 'vendor/composer/installed.json');
+        if (!declared && fs.existsSync(installed)) {
+            try {
+                const data = JSON.parse(fs.readFileSync(installed, 'utf8'));
+                declared = (data.packages || data).some(pkg => pkg.extra?.saola?.directives);
+            } catch (error) {
+                declared = false;
+            }
+        }
+        this.directivesRootFor = root;
+        this.directivesRoot = declared ? root : null;
+        return this.directivesRoot;
+    }
+
     /** Gửi source qua stdin, nhận cả Blade và JS từ một tiến trình PHP. */
     compileWithPhp(source, options) {
+        const directives = options.sandbox ? null : this.resolveDirectivesRoot();
         if (this.phpWorker) {
             return new Promise((resolve, reject) => {
                 const id = ++this.phpWorkerRequestId;
                 this.phpWorkerPending.set(id, { resolve, reject });
-                this.phpWorker.stdin.write(JSON.stringify({ id, cmd: 'compile', source, options }) + '\n');
+                const request = { id, cmd: 'compile', source, options };
+                if (directives) request.directives = directives;
+                this.phpWorker.stdin.write(JSON.stringify(request) + '\n');
             });
         }
         return new Promise((resolve, reject) => {
@@ -852,14 +958,17 @@ class Compiler {
             const optionNames = {
                 viewPath: 'view-path', functionName: 'fn', factoryName: 'factory',
                 namespace: 'namespace', emit: 'emit', lang: 'lang',
-                idMode: 'id-mode', assetPrefix: 'asset-prefix'
+                idMode: 'id-mode', assetPrefix: 'asset-prefix', fuseRows: 'fuse-rows',
+                clientHelpers: 'client-helpers'
             };
             for (const [key, cliName] of Object.entries(optionNames)) {
                 if (options[key] !== undefined && options[key] !== null) {
-                    args.push(`--${cliName}=${options[key]}`);
+                    const value = Array.isArray(options[key]) ? JSON.stringify(options[key]) : options[key];
+                    args.push(`--${cliName}=${value}`);
                 }
             }
             if (options.sandbox) args.push('--sandbox');
+            if (directives) args.push(`--directives=${directives}`);
 
             const child = spawn(process.env.SAOLA_PHP_BINARY || 'php', args, {
                 stdio: ['pipe', 'pipe', 'pipe'],
@@ -1059,10 +1168,10 @@ class Compiler {
         // đổi mỗi lần build, làm registry.ts sinh ra khác nhau dù nguồn không
         // đổi. Build không tái lập được thì `git diff` đầy nhiễu và bundler
         // đổi hash chunk vô cớ. Sắp theo namingPath cho ổn định.
-        const compiledViews = [...(this.compiledViews[contextName] || [])]
+        let compiledViews = [...(this.compiledViews[contextName] || [])]
             .sort((a, b) => a.namingPath.localeCompare(b.namingPath));
         
-        if (compiledViews.length === 0) {
+        if (compiledViews.length === 0 && !this.packageOutput) {
             console.log('   ℹ️  No compiled views found, skipping registry generation');
             return;
         }
@@ -1075,7 +1184,22 @@ class Compiler {
         // `registry.eager` liệt kê view giữ eager (dot-path hoặc tiền tố) —
         // nên gồm view entry của route hay được truy cập nhất, vì view entry
         // lazy làm hydrate phải chờ tải chunk mới tương tác được.
-        const registryOptions = contextConfig.registry || {};
+        const registryOptions = { ...(contextConfig.registry || {}) };
+        if (this.packageOutput) {
+            registryOptions.writeFile = (file, data) => this.writeOutput(file, data);
+            registryOptions.readFile = file => this.packageOutput.get(file) ?? fs.readFileSync(file, 'utf8');
+            const pkg = ContextPackages.source(contextConfig);
+            pkg.themeRegistries = {};
+            for (const theme of pkg.manifest.themes) {
+                const prefix = `${pkg.themeNamespaces?.[theme] || `${contextName}.${theme}`}/`;
+                const entries = compiledViews.filter(entry => entry.namingPath.startsWith(prefix));
+                const themedPath = registryFullPath.replace(/\.(js|ts)$/, `.${theme}.js`);
+                RegistryGenerator.generate(contextName, entries, themedPath, viewsDir, {...registryOptions, lazy: false});
+                pkg.themeRegistries[theme] = themedPath.replace(/\.js$/, entries.some(entry => entry.actualPath.endsWith('.ts')) ? '.ts' : '.js');
+            }
+            const prefixes = pkg.manifest.themes.map(theme => `${pkg.themeNamespaces?.[theme] || `${contextName}.${theme}`}/`);
+            compiledViews = compiledViews.filter(entry => !prefixes.some(prefix => entry.namingPath.startsWith(prefix)));
+        }
         RegistryGenerator.generate(
             contextName,
             compiledViews,
@@ -1140,25 +1264,28 @@ class Compiler {
 
             console.log(`\n👀 Watching for changes in ${saoFilesDir}...`);
 
-            const watcher = chokidar.watch(saoFilesDir, {
-                ignored: ['node_modules', '.git', '.*'],
+            const watchedContexts = singleContext ? [singleContext] : Object.keys(config.contexts || {});
+            const configFiles = new Set([path.join(projectRoot, 'sao.config.json'), require('./context-modes').environmentFile(projectRoot)]);
+            const watchPaths = [...new Set([saoFilesDir, ...configFiles, ...ContextPackages.watchRoots(config, projectRoot, watchedContexts)])];
+            // Chokidar may announce ready early for a missing path. Scan the
+            // existing source trees first, then subscribe to future additions.
+            const watcher = chokidar.watch(watchPaths.filter(file => fs.existsSync(file)), {
+                ignored: file => !configFiles.has(path.resolve(file)) && /(^|[\\/])(node_modules|\.[^\\/]+)([\\/]|$)/.test(file),
                 persistent: true,
+                ignoreInitial: true,
                 awaitWriteFinish: {
                     stabilityThreshold: 100,
                     pollInterval: 100
                 }
             });
+            watcher.once('ready', () => watcher.add(watchPaths.filter(file => !fs.existsSync(file))));
 
-            let buildTimeout;
-            const debounce = (callback) => {
-                return () => {
-                    clearTimeout(buildTimeout);
-                    buildTimeout = setTimeout(callback, 500);
-                };
-            };
-
-            const rebuildContexts = debounce(async () => {
+            const rebuildQueue = require('./rebuild-queue')(async () => {
                 try {
+                    if (fs.existsSync(path.join(projectRoot, 'sao.config.json')) || fs.existsSync(path.join(projectRoot, 'resources/saola'))) {
+                        config = ConfigManager.loadConfig(projectRoot).config;
+                        watcher.add(ContextPackages.watchRoots(config, projectRoot, singleContext ? [singleContext] : Object.keys(config.contexts || {})));
+                    }
                     if (singleContext) {
                         await this.buildContext(config, projectRoot, singleContext);
                     } else {
@@ -1167,26 +1294,27 @@ class Compiler {
                 } catch (error) {
                     console.error(`\n❌ Compilation error: ${error.message}`);
                 }
-            });
+            }, 500);
+            this.rebuildQueues.push(rebuildQueue);
 
             watcher.on('change', (filePath) => {
-                if (filePath.endsWith('.sao')) {
+                if (configFiles.has(path.resolve(filePath)) || /\.(sao|ts|js|mjs|json|css|svg|png|woff2?)$/.test(filePath)) {
                     console.log(`\n📝 Change detected: ${path.relative(saoFilesDir, filePath)}`);
-                    rebuildContexts();
+                    rebuildQueue.schedule();
                 }
             });
 
             watcher.on('add', (filePath) => {
-                if (filePath.endsWith('.sao')) {
+                if (configFiles.has(path.resolve(filePath)) || /\.(sao|ts|js|mjs|json|css|svg|png|woff2?)$/.test(filePath)) {
                     console.log(`\n✨ New file: ${path.relative(saoFilesDir, filePath)}`);
-                    rebuildContexts();
+                    rebuildQueue.schedule();
                 }
             });
 
             watcher.on('unlink', (filePath) => {
-                if (filePath.endsWith('.sao')) {
+                if (configFiles.has(path.resolve(filePath)) || /\.(sao|ts|js|mjs|json|css|svg|png|woff2?)$/.test(filePath)) {
                     console.log(`\n🗑️  File deleted: ${path.relative(saoFilesDir, filePath)}`);
-                    // Could optionally trigger rebuild to clean up generated files
+                    rebuildQueue.schedule();
                 }
             });
 
@@ -1203,11 +1331,11 @@ class Compiler {
     /**
      * Close all watchers
      */
-    closeWatchers() {
-        for (const watcher of this.watcherInstances) {
-            watcher.close();
-        }
+    async closeWatchers() {
+        const closing = [...this.watcherInstances.map(watcher => watcher.close()), ...this.rebuildQueues.map(queue => queue.close())];
         this.watcherInstances = [];
+        this.rebuildQueues = [];
+        await Promise.all(closing);
         if (this.phpWorker) {
             this.phpWorker.stdin.end();
             this.phpWorker.kill();
@@ -1287,6 +1415,9 @@ class Compiler {
             for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
                 const full = path.join(dir, entry.name);
                 if (entry.isDirectory()) {
+                    // Theme đã cài (`saola:theme:install`) sống trong cùng cây Blade
+                    // sinh ra, đánh dấu bằng `.saola-theme`: không phải của build.
+                    if (fs.existsSync(path.join(full, '.saola-theme'))) continue;
                     walk(full);
                     try { if (fs.readdirSync(full).length === 0) fs.rmdirSync(full); } catch { /* bỏ qua */ }
                 } else if (entry.name.endsWith('.blade.php') && !this.writtenBlade.has(path.resolve(full))) {
@@ -1324,7 +1455,7 @@ class Compiler {
 
         const registryAbs = ConfigManager.resolveCompiledPath(projectRoot, paths, compiledConfig.registry);
         const registryTs = registryAbs.replace(/\.(js|ts)$/, '.ts');
-        const registryFile = fs.existsSync(registryTs) ? registryTs : registryAbs.replace(/\.(js|ts)$/, '.js');
+        const registryFile = (this.packageOutput?.has(registryTs) || fs.existsSync(registryTs)) ? registryTs : registryAbs.replace(/\.(js|ts)$/, '.js');
         const registryImport = './' + path.relative(compiledBase, registryFile)
             .replace(/\\/g, '/')
             .replace(/\.(ts|js)$/, '.js');
@@ -1350,15 +1481,49 @@ class Compiler {
         ];
         const own = [];
         if (shared) { imports.push(`import sharedBundle from '@sao/${sharedDir}/bootstrap';`); own.push('sharedBundle'); }
-        if (ctxBootstrap) { imports.push(`import contextBundle from '@sao/${ctxAppRel}/bootstrap';`); own.push('contextBundle'); }
+        if (ContextPackages.source(contextConfig)) {
+            const pkg = ContextPackages.source(contextConfig);
+            const relativeImport = file => './' + path.relative(compiledBase, file).replace(/\\/g, '/');
+            const bootstrap = path.join(pkg.effectiveRoot, pkg.manifest.bootstrap);
+            if (fs.existsSync(bootstrap)) {
+                const bundleName = pkg.kind === 'package' ? 'packageBundle' : 'contextBundle';
+                imports.push(`import ${bundleName} from ${JSON.stringify(relativeImport(bootstrap))};`);
+                if (pkg.kind === 'package') own.unshift(bundleName); else own.push(bundleName);
+            }
+            if (pkg.projectBootstrap && fs.existsSync(pkg.projectBootstrap)) {
+                imports.push(`import projectBundle from ${JSON.stringify(relativeImport(pkg.projectBootstrap))};`);
+                own.push('projectBundle');
+            }
+        } else if (ctxBootstrap) { imports.push(`import contextBundle from '@sao/${ctxAppRel}/bootstrap';`); own.push('contextBundle'); }
+        const mergeOptions = contextConfig._contextPackage ? `, ${JSON.stringify({strict: true, overridable: contextConfig._contextPackage.manifest.overridable || []})}` : '';
+        let themeSetup = '';
+        let themeViews = '';
+        let sourceOptions = '';
+        if (contextConfig._contextPackage) {
+            const pkg = contextConfig._contextPackage;
+            const loaders = Object.entries(pkg.themeRegistries).map(([theme, file]) => `${JSON.stringify(theme)}: () => import(${JSON.stringify('./' + path.relative(compiledBase, file).replace(/\\/g, '/').replace(/\.[jt]s$/, '.js'))})`).join(',\n');
+            themeSetup = `const themeLoaders = {${loaders}};
+    const selectedTheme = (typeof window !== 'undefined' && window.APP_CONFIGS?.shared?.[${JSON.stringify('saola.context.' + contextName)}]?.theme) || ${JSON.stringify(pkg.manifest.defaultTheme)};
+    if (!Object.prototype.hasOwnProperty.call(themeLoaders, selectedTheme)) throw new Error('Context ${contextName}: unknown theme ' + selectedTheme);
+    const themeRegistry = (await themeLoaders[selectedTheme]()).default;`;
+            themeViews = '...themeRegistry, ';
+            sourceOptions = `strictBundles: true,
+        overridable: ${JSON.stringify(pkg.manifest.overridable || [])},
+        themeNamespaces: ${JSON.stringify(pkg.manifest.api ? [pkg.manifest.api + '.Presentation'] : [])},
+        bundleKinds: (typeof window !== 'undefined' && window.APP_CONFIGS?.shared?.[${JSON.stringify('saola.context.' + contextName)}]?.bundleKinds) || {},`;
+        }
 
+        const authoredBootstrap = ContextPackages.source(contextConfig)
+            ? path.join(ContextPackages.source(contextConfig).hostRoot, 'app/bootstrap.ts')
+            : path.resolve(saoView, ctxAppRel || contextName, 'bootstrap.ts');
+        const bootstrapHint = path.relative(projectRoot, authoredBootstrap).replace(/\\/g, '/');
         const content = `/**
  * ĐƯỢC SINH TỰ ĐỘNG bởi @saolabs/builder — đừng sửa file này.
  * Sinh lúc: ${new Date().toISOString()}
  *
  * Muốn thêm provider / service / helper thì sửa:
  *   ${paths.saoView}/${sharedDir}/bootstrap.ts     (mọi context)
- *   ${paths.saoView}/${ctxAppRel}/bootstrap.ts     (riêng ${contextName})
+ *   ${bootstrapHint}     (riêng ${contextName})
  */
 
 ${imports.join('\n')}
@@ -1370,16 +1535,18 @@ const container = app();
 if (typeof window !== 'undefined') window.Saola = SaolaRuntime;
 
 // Bundle nguồn của chính app, gộp theo thứ tự: chung trước, context sau.
-const own = mergeBundles([${own.join(', ')}]);
+const own = mergeBundles([${own.join(', ')}]${mergeOptions});
 
 // Top-level await sẽ đẩy build.target lên cao và làm hỏng vài đường phân tích
 // tĩnh của rollup — dùng async IIFE.
 (async () => {
+    ${themeSetup}
     await App.start({
+        ${sourceOptions}
         view: {
-            container: '#app-root',
+            container: (typeof window !== 'undefined' && window.APP_CONFIGS?.container) || '#app-root',
             // Bundle nạp rời (theme) đè lên registry này, xử lý trong App.start.
-            registry: { ...registry, ...own.views },
+            registry: { ...registry, ${themeViews}...own.views },
         },
         services: own.services,
         helpers: own.helpers,
@@ -1397,8 +1564,49 @@ export { container as App, registry };
 `;
 
         this.ensureDir(path.dirname(entryPath));
-        fs.writeFileSync(entryPath, content, 'utf8');
+        this.writeOutput(entryPath, content);
         console.log(`   ✓ Generated entry: app.${contextName}.js`);
+    }
+
+    writeOutput(file, content) {
+        if (this.packageOutput) this.packageOutput.set(path.resolve(file), content);
+        else fs.writeFileSync(file, content, 'utf8');
+    }
+
+    generateContextTypes(config, projectRoot) {
+        const base = ConfigManager.resolveCompiledPath(projectRoot, config.paths, '');
+        const paths = { '@sao/*': [path.relative(base, path.resolve(projectRoot, config.paths.saoView, '*')).replace(/\\/g, '/')] };
+        paths['@app/*'] = [path.relative(base, path.resolve(projectRoot, config.paths.saoView, config.paths.sharedApp || '_app', '*')).replace(/\\/g, '/')];
+        paths['@compiled/*'] = ['*'];
+        for (const ctx of Object.values(config.contexts || {})) {
+            const pkg = ContextPackages.source(ctx);
+            if (!pkg) continue;
+            const relative = path.relative(base, pkg.effectiveRoot).replace(/\\/g, '/');
+            paths[`@sao/${pkg.context}/*`] = [`${relative}/*`];
+            paths[`@${pkg.context}/*`] = [`${relative}/*`];
+        }
+        // Shared across contexts; generated from the complete config on every run.
+        fs.mkdirSync(base, {recursive: true});
+        const declarations = Object.values(config.contexts || {}).filter(ctx => ContextPackages.source(ctx)?.manifest.types).map(ctx => {
+            const pkg = ContextPackages.source(ctx);
+            const file = path.relative(path.join(base, 'types'), path.join(pkg.effectiveRoot, pkg.manifest.types)).replace(/\\/g, '/').replace(/\.(ts|d\.ts)$/, '');
+            return `import type {} from ${JSON.stringify(file.startsWith('.') ? file : './' + file)};`;
+        }).join('\n');
+        ContextPackages.writeOwned(path.join(base, '.context-types.json'), [base], new Map([
+            [path.join(base, 'tsconfig.contexts.json'), JSON.stringify({compilerOptions: {baseUrl: '.', paths, allowJs: true}}, null, 2) + '\n'],
+            [path.join(base, 'types/contexts.d.ts'), declarations + '\n'],
+        ]), projectRoot);
+    }
+
+    writeContextMetadata(context, projectRoot, paths, contextName) {
+        const pkg = ContextPackages.source(context);
+        const file = path.resolve(projectRoot, paths.public || 'public/static/saola', 'contexts.json');
+        if (!pkg && !fs.existsSync(file)) return;
+        const metadata = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+        if (pkg) metadata[pkg.context] = {mode: pkg.kind, theme: pkg.selectedTheme || null, namespace: pkg.namespace || pkg.context, package: pkg.package, contract: pkg.manifest.contract, css: pkg.css, defaultCss: pkg.kind === 'package' ? undefined : Object.keys(pkg.css)[0], overridable: pkg.manifest.overridable || []};
+        else delete metadata[contextName];
+        fs.mkdirSync(path.dirname(file), {recursive: true});
+        fs.writeFileSync(file, JSON.stringify(metadata, null, 2) + '\n');
     }
 
     /**
@@ -1476,6 +1684,8 @@ ${hasApp ? `    providers: themeApp?.providers ?? [],
             name: t.name || null,
             version: t.version || '0.0.0',
             context: t.context || 'web',
+            // Namespace view mà Blade của gói tham chiếu — `saola:theme:install` đối chiếu.
+            namespace: `${t.context || 'web'}.${t.slug || ''}`,
             contract: Compiler.OUTPUT_CONTRACT,
             idMode: this.compilerOptions?.idMode || 'terse',
             builder: this.readPackageVersion(path.join(__dirname, '..')),

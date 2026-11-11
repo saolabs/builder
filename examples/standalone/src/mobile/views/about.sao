@@ -1,0 +1,1 @@
+<template><main><p class="eyebrow">MOBILE CONTEXT</p><h1>Hash navigation.</h1><p>This route works on a static host without a history fallback rule.</p><a href="/">← Back</a></main></template>

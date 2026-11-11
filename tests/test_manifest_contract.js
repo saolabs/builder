@@ -24,6 +24,22 @@ try {
     fs.writeFileSync(path.join(runtimeDir, 'package.json'), JSON.stringify({ version: '9.8.7' }));
 
     const compiler = new Compiler();
+
+    // fuseRows: chỉ bật khi client của dự án có FusedRow (≥ 1.10); theme mặc định tắt.
+    {
+        const probe = new Compiler();
+        probe.projectRoot = root;
+        const withClient = (version) => fs.writeFileSync(path.join(runtimeDir, 'package.json'), JSON.stringify({ version }));
+        withClient('1.9.0'); check('fuseRows tắt với client 1.9', probe.fuseRowsEnabled() === false);
+        withClient('1.10.0'); check('fuseRows bật với client 1.10', probe.fuseRowsEnabled() === true);
+        withClient('2.0.1'); check('fuseRows bật với client 2.x', probe.fuseRowsEnabled() === true);
+        probe.themeConfig = { slug: 'x' }; check('fuseRows tắt khi build gói theme', probe.fuseRowsEnabled() === false);
+        probe.compilerOptions = { fuseRows: true }; check('compiler.fuseRows ghi đè', probe.fuseRowsEnabled() === true);
+        probe.themeConfig = null; probe.compilerOptions = { fuseRows: false }; check('compiler.fuseRows=false ghi đè', probe.fuseRowsEnabled() === false);
+        fs.rmSync(path.join(runtimeDir, 'package.json')); probe.compilerOptions = {};
+        check('fuseRows tắt khi không thấy client', probe.fuseRowsEnabled() === false);
+        withClient('9.8.7');
+    }
     compiler.compilerOptions = { idMode: 'compact' };
     compiler.themeConfig = {
         slug: 'aurora',

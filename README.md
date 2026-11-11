@@ -67,6 +67,7 @@ về cả Blade và JS/TS để hai output dùng cùng marker.
 
 ```bash
 npm test
+npm run test:context-sources # local artifact + compile/SSR/hydration gate; see docs/CONTEXT_PACKAGES.md
 npm run publish-dry-run
 ```
 
@@ -79,3 +80,19 @@ Xem thêm [kiến trúc](docs/ARCHITECTURE.md).
 ## License
 
 MIT
+
+## Standalone SPA distribution
+
+Independent contexts can use `{context}/{app,assets,views}` with `.env` mode selection and no web/admin package or required `sao.config.json`. Local themes use `{context}/themes/{name}` and share the same app logic.
+
+Context packages can also supply frontend source directly from Composer installations,
+without a required source publish. See [context package builds](docs/CONTEXT_PACKAGES.md)
+for the Vite pipeline, typed App APIs, project overrides and migration from published sources.
+
+Dùng `sao-dist [context|all] [--static]` để xuất `dist/<context>/index.html`, bundle và
+assets, phục vụ độc lập trên static host. Dùng lại cấu hình ứng dụng và routes
+Laravel; bổ sung tùy chọn `dist` trong `sao.config.json` khi cần API URL/key/base URL.
+Xem [hướng dẫn dist](docs/STANDALONE_DIST.md) và ví dụ `examples/standalone/`.
+
+`npm run dist:web -- --static` render routes Laravel thành HTML hoàn chỉnh tại
+`dist-static/web/`; `/vn` xuất thành `vn/index.html`, route `.html` giữ tên file.
