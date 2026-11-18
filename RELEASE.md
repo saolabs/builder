@@ -1,3 +1,9 @@
+# Saola Builder v1.8.0
+
+`sao-dist` carries the data of the client `href()` into dist builds: `export-dist.php` exports each context's `context`, public `links`, `contexts` and `primary` when `saola/core` ≥ 2.13 is installed, and `resolveRuntimeConfig` merges them into `router` below any router keys the dist configuration declares. A dist has no viewer, so only contexts declared `'links' => 'public'` are included.
+
+Validation: 57 builder tests.
+
 # Saola Builder v1.7.0
 
 Passes the new `fuseRows` option to `saola/compiler` 3.8.0 (fused `@foreach` rows). It is enabled only when the project's installed `@saolabs/client` is ≥ 1.10.0, because fused output calls a runtime method older clients do not have. Theme packages are built with it off by default (they run on the installing app's client). `compiler.fuseRows` (`true` / `false`) in `sao.config.json` overrides both. Older compilers ignore the option.
