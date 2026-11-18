@@ -109,11 +109,16 @@ test('inline dist overrides reuse application routes and exported namespaces', a
         return Object.fromEntries(names.map(name => [name, {
             routes: [{ path: '/', component: `${name}.home` }],
             view: { contextViews: { base: name }, revision: 'v1', systemData: { __layout__: `${name}.layouts.` } },
+            href: { context: name, links: { 'app.home.index': ['app', '/'] }, contexts: { app: { as: 'app', hosts: ['app.test'] } }, primary: 'https://example.test' },
         }]));
     });
     assert.deepEqual(requested, ['web', 'mobile']);
     const html = makeHtml(validateContext(config, source, 'web', root));
     assert.match(html, /web.layouts/);
+    // href() data reaches the boot config of the dist (router.context/links/contexts/primary).
+    assert.match(html, /"links":\{"app\.home\.index":\["app","\/"\]\}/);
+    assert.match(html, /"primary":"https:\/\/example\.test"/);
+    assert.equal(config.contexts.web.router.context, 'web');
     assert.match(html, /X-API-Key/);
     assert.equal(config.contexts.web.base, '/portal/');
     assert.equal(config.contexts.mobile.base, '/');

@@ -81,7 +81,7 @@ async function resolveRuntimeConfig(config, projectRoot, exporter = exportRuntim
         const runtime = exported[name];
         if (runtime) {
             cfg.i18n = { ...runtime.i18n, ...cfg.i18n };
-            cfg.router = { mode: 'history', ...cfg.router, routes: cfg.router?.routes || runtime.routes };
+            cfg.router = { mode: 'history', ...runtime.href, ...cfg.router, routes: cfg.router?.routes || runtime.routes };
             cfg.view = { ...runtime.view, ...cfg.view, systemData: { ...runtime.view?.systemData, ...cfg.view?.systemData } };
         }
         if (cfg.locales !== undefined) {

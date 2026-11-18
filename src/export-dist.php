@@ -19,6 +19,9 @@ foreach (array_slice($argv, 3) as $context) {
     $state = $manager->exportContextState($context);
     $result[$context] = [
         'routes' => $helper->exportComponentRoutes($context),
+        // href(): context, links (public contexts only: a dist has no viewer), contexts, primary. Core ≥ H5.
+        'href' => class_exists(\Saola\Core\Routing\RouteIndex::class)
+            ? $app->make(\Saola\Core\Routing\RouteIndex::class)->clientLinks($context) : null,
         'i18n' => $i18n,
         'view' => [
             'contextViews' => $state['views'],
