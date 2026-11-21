@@ -1,3 +1,9 @@
+# Saola Builder v1.8.1
+
+Contexts sharing an output root (`_views`) no longer block each other's builds: when a shared view changes, the first context rewrites it and the next one used to fail with "Generated file was customized or is unowned" because its own ledger still held the old hash. A file that already holds exactly the content about to be written is now accepted; a real hand edit still fails the build.
+
+Validation: 58 builder tests.
+
 # Saola Builder v1.8.0
 
 `sao-dist` carries the data of the client `href()` into dist builds: `export-dist.php` exports each context's `context`, public `links`, `contexts` and `primary` when `saola/core` ≥ 2.13 is installed, and `resolveRuntimeConfig` merges them into `router` below any router keys the dist configuration declares. A dist has no viewer, so only contexts declared `'links' => 'public'` are included.
