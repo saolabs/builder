@@ -157,7 +157,10 @@ function writeOwned(inventoryFile, roots, content, anchor = path.dirname(invento
         }
         if (!fs.existsSync(file)) continue;
         const current = hash(fs.readFileSync(file));
-        if (previous[file] ? previous[file] !== current : (!content.has(file) || current !== hash(content.get(file)))) throw new Error(`Generated file was customized or is unowned: ${file}`);
+        // Already holding exactly what we are about to write is fine even if our ledger is stale: another context
+        // sharing this output (e.g. `_views`) wrote it first.
+        const matches = content.has(file) && current === hash(content.get(file));
+        if (previous[file] ? previous[file] !== current && !matches : !matches) throw new Error(`Generated file was customized or is unowned: ${file}`);
     }
     for (const [file, data] of content) {
         fs.mkdirSync(path.dirname(file), { recursive: true });

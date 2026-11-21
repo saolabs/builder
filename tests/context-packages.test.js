@@ -256,3 +256,17 @@ test('writeOwned forgets files of a root removed from config instead of failing 
     assert.ok(fs.existsSync(dropped), 'never deletes outside the current roots');
     assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(inventory, 'utf8'))), [keep]);
 });
+
+test('two contexts sharing an output file do not trip each other\'s stale ledger', t => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'saola-owned-'));
+    t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+    const out = path.join(root, 'views'), shared = path.join(out, '_views/card.blade.php');
+    const app = path.join(root, '.context-output-app.json'), web = path.join(root, '.context-output-web.json');
+    for (const inv of [app, web]) Packages.writeOwned(inv, [out], new Map([[shared, 'v1']]), root);
+    // the shared .sao changed: app writes first, web's ledger still holds the v1 hash
+    for (const inv of [app, web]) Packages.writeOwned(inv, [out], new Map([[shared, 'v2']]), root);
+    assert.equal(fs.readFileSync(shared, 'utf8'), 'v2');
+    fs.writeFileSync(shared, 'hand edit');
+    assert.throws(() => Packages.writeOwned(app, [out], new Map([[shared, 'v3']]), root), /customized/);
+    assert.equal(fs.readFileSync(shared, 'utf8'), 'hand edit');
+});
